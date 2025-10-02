@@ -14,7 +14,7 @@ QueueHandle_t espNowQueue = NULL;
 QueueHandle_t httpQueue = NULL;
 QueueHandle_t displayQueue = NULL;
 
-// Networking placeholders - replace with real values
+// Networking placeholders
 const char* WIFI_SSID = secret::WIFI_SSID;
 const char* WIFI_PASS = secret::WIFI_PASS;
 const char* SERVER_URL = secret::SERVER_URL;

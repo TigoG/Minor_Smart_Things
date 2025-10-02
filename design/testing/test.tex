@@ -1,0 +1,388 @@
+% Weather Station --- Comprehensive Manual Test Procedures
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{amsmath}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\title{Weather Station --- Comprehensive Manual Test Procedures}
+\author{Minor Smart Things --- Test Engineering \\ Author: Tigo Goes}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose and scope}
+This document contains detailed manual test procedures for bench and field verification of the Weather Station firmware and hardware. It is intended for engineers and technicians performing hands-on tests. Follow the preconditions and steps exactly; record artifacts for traceability.
+
+\section{Test inventory}
+The following hardware and firmware interfaces are covered:
+\begin{itemize}[noitemsep]
+\item DHT22 -- Temperature \& humidity sensor
+\item BH1750 -- Ambient light / lux sensor
+\item Hall-effect anemometer -- Wind-speed pulse output
+\item Stepper motor -- Shade / vent control (PWM)
+\item SSD1306 OLED display (I2C)
+\item ESP-NOW -- peer-to-peer messaging
+\item WiFi / HTTP client -- connectivity checks
+\item Serial console and debug logging
+\item Power supply and current draw measurements
+\end{itemize}
+
+\section{Tools and equipment}
+Minimum recommended equipment:
+\begin{itemize}[noitemsep]
+\item Calibrated reference thermometer and hygrometer
+\item Calibrated lux meter
+\item Reference anemometer or controlled fan rig
+\item Multimeter and current meter
+\item Logic analyzer or frequency counter (for pulse capture)
+\item Second ESP32 (peer) for ESP-NOW tests
+\item USB-to-serial adapter and terminal program
+\item Camera or phone for photos/screenshots
+\end{itemize}
+
+\section{Data capture and artifacts}
+For each manual test record:
+\begin{itemize}[noitemsep]
+\item Date, time, tester name and board serial/ID
+\item Firmware version or build identifier
+\item Raw serial logs (plain text)
+\item Measurement CSVs (timestamped)
+\item Photos / screenshots of setup or display
+\end{itemize}
+
+\section{How to use acceptance criteria}
+Acceptance criteria define PASS/FAIL per test. Use the following approach:
+\begin{itemize}[noitemsep]
+\item Define sample size (N) appropriate for the test. Typical N=10 for sensor stability checks; N=3--5 for quick verification.
+\item Compute metrics: mean error (vs reference), standard deviation, maximum absolute error, failure rate (read errors).
+\item Compare metrics against thresholds declared under each test. All thresholds must be met for PASS.
+\item If a metric fails, record raw data and artifacts, then attempt a hardware swap (known-good module) to determine hardware vs firmware issue.
+\item When reporting results, include the computed metrics and the raw CSV used to compute them.
+\end{itemize}
+
+\section{Manual test cases}
+
+\subsection{DHT22 --- Temperature and humidity}
+Purpose: Verify correct parsing and stability of DHT22 readings.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item DHT22 wired to the configured data pin and powered.
+\item Serial console open and logging enabled.
+\item Reference thermometer/hygrometer co-located within 5\,cm.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Start serial logging and note firmware identifier.
+\item Trigger or wait for N=10 consecutive measurements at 2\,s intervals.
+\item Save the readings to CSV with timestamps and raw sensor values.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item Temperature: mean error within $\pm0.5\,^\circ$C.
+\item Relative humidity: mean error within $\pm5\%$RH.
+\item Read failure rate: $<$5\% in sample set.
+\end{itemize}
+
+Acceptance:
+\begin{itemize}[noitemsep]
+\item PASS if all thresholds are met and no parser exceptions are logged.
+\end{itemize}
+
+Artifacts: serial log, CSV, photo of sensor placement.
+
+\subsection{BH1750 --- Ambient light (lux)}
+Purpose: Verify I2C reads and conversion to lux.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item BH1750 connected to I2C and powered.
+\item Reference lux meter calibrated and placed near sensor.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Capture N=5 readings at low, medium and high illuminance.
+\item Compute lux = raw / 1.2 for each reading and record in CSV.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item Mean error $<$10\% across tested range (10--10\,000 lux).
+\item I2C transient errors tolerated up to 3 occurrences; persistent errors (5 consecutive) fail.
+\end{itemize}
+
+Acceptance: PASS if mean error $<$10\% and no persistent I2C errors.
+
+Artifacts: CSV, serial log, photo of light source \& meter.
+
+\subsection{Hall-effect anemometer --- Wind speed}
+Purpose: Validate pulse counting, debounce and conversion to m/s.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item Pulse output connected to interrupt pin.
+\item Known pulses-per-revolution (ppr) and rotor diameter available.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Run a controlled fan at three reference speeds; capture pps over fixed windows (e.g., 10\,s).
+\item Compute speed: $v = \dfrac{\mathrm{pps}}{\mathrm{ppr}} \times \dfrac{\pi\times\mathrm{rotor\_diameter}}{\mathrm{measurement\_window\_s}}$.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item Calibration error within $\pm10\%$ vs reference at each test point.
+\item Debounce: ignore pulses shorter than 5\,ms.
+\end{itemize}
+
+Acceptance: PASS if all three test points within $\pm10\%$.
+
+Artifacts: serial log, CSV, photos of rig.
+
+\subsection{Stepper motor --- Position and response}
+Purpose: Verify stepper motor control, accuracy, and response time.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item Stepper motor powered and mechanically coupled to load; position indicator (e.g., pointer and protractor, or rotary encoder) attached to measure angle.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Command the stepper to specific angles: 0°, 90°, and 180° (or full travel range as appropriate). Record the actual angle reached and the time taken to reach each position.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item Position accuracy within $\pm5^\circ$ of target angle (or $\pm5\%$ of full travel, whichever is stricter).
+\item Response time $\leq1$\,s to reach each commanded angle.
+\end{itemize}
+
+Acceptance: PASS if all positions meet accuracy and timing criteria.
+
+Artifacts: video/photo, serial log of commands and positions.
+
+\subsection{SSD1306 OLED --- Display verification}
+Purpose: Verify initialization, rendering and stability.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item Display connected to I2C and powered.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Render a test pattern (text and shapes) and capture photo.
+\item Update content at 5 updates/sec for 10 seconds and inspect for artifacts.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item No persistent artifacts; text readable.
+\item I2C errors: up to 2 transient allowed; persistent (5 consecutive) fail.
+\end{itemize}
+
+Acceptance: PASS if visual checks and error thresholds respected.
+
+Artifacts: photos/video and serial logs.
+
+\subsection{ESP-NOW --- Communications}
+Purpose: Verify broadcast, peer messaging, acknowledgements, fragmentation and reassembly.
+
+List of required items:
+\begin{itemize}[noitemsep]
+\item Device Under Test (DUT): the board running the firmware.
+\item Peer device: second ESP32 configured to receive messages and log receipts.
+\item Both devices with serial logging enabled.
+\item Optional: WiFi access point to test coexistence and interference scenarios.
+\end{itemize}
+
+How to run ESP-NOW tests:
+\begin{enumerate}[noitemsep]
+\item Ensure peer MAC address is known and configured on DUT if testing peer-targeted messages.
+\item Use the firmware's manual send command or console interface to trigger message bursts.
+\item Capture serial logs on both DUT and peer with timestamps.
+\end{enumerate}
+
+Test A: Broadcast reliability
+\begin{enumerate}[noitemsep]
+\item Send 100 broadcast messages at a steady rate (e.g., 5 msg/s) with small payloads (32 bytes).
+\item Peer counts and timestamps received messages.
+\end{enumerate}
+
+Metrics and thresholds:
+\begin{itemize}[noitemsep]
+\item Delivery rate $>$95\% under lab conditions.
+\item Watch for duplicates and reorder; document occurrences.
+\end{itemize}
+
+Acceptance: PASS if delivery $>$95\% and no DUT crashes.
+
+Test B: Peer sends with acknowledgements
+\begin{enumerate}[noitemsep]
+\item Send 100 messages to peer MAC with ack requested (if supported).
+\item Verify ack receipts and measure round-trip latency for a sample subset.
+\end{enumerate}
+
+Metrics and thresholds:
+\begin{itemize}[noitemsep]
+\item Ack rate $>$95\%.
+\item Typical latency within expected range (measure and document).
+\end{itemize}
+
+Acceptance: PASS if ack rate $>$95\% and no memory crashes.
+
+Test C: Fragmentation \& large payload handling
+\begin{enumerate}[noitemsep]
+\item Send payloads larger than single-packet limit (split by firmware) and verify correct reassembly on peer.
+\item Intentionally stress DUT queue to observe behavior when full.
+\end{enumerate}
+
+Metrics and thresholds:
+\begin{itemize}[noitemsep]
+\item Reassembly success rate and no data corruption.
+\item DUT remains stable (no crashes) when queue fills; record dropped message policy observed.
+\end{itemize}
+
+Acceptance: PASS if reassembly works and DUT remains stable.
+
+Artifacts: serial logs (DUT and peer), CSV of counts/timestamps, notes on RF environment.
+
+\subsection{WiFi / HTTP --- Manual connectivity checks}
+Purpose: Verify behavior during connect, disconnect, and queued delivery.
+
+Preconditions:
+\begin{itemize}[noitemsep]
+\item WiFi credentials configured on DUT.
+\item Local endpoint or test server available for manual verification.
+\end{itemize}
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item With WiFi connected, trigger telemetry upload and observe server receipts.
+\item Remove WiFi and trigger telemetry; observe DUT queueing behavior locally.
+\item Reconnect WiFi and verify queued payloads are delivered; document times.
+\end{enumerate}
+
+Acceptance: PASS if queued payloads delivered after reconnection and DUT remains stable.
+
+Artifacts: serial logs and server receipts.
+
+\subsection{Power and stability tests}
+Purpose: Measure current draw, brownout behavior and long-run stability.
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Measure idle and active current draw with a current meter.
+\item Run a soak test with periodic sensor readings and communications for 24 hours; capture periodic snapshots.
+\item Induce brownout (gradual supply drop) and observe watchdog and recovery behavior.
+\end{enumerate}
+
+Measurements and thresholds:
+\begin{itemize}[noitemsep]
+\item Idle current within expected budget (document expected numbers per board).
+\item No memory leaks or accumulative errors during soak; verify periodic heap statistics if available.
+\end{itemize}
+
+Acceptance: PASS if current draw within budget and no stability regressions over the soak period.
+
+Artifacts: current traces, periodic logs, heap snapshots.
+
+\subsection{I2C bus recovery and error handling}
+Purpose: Verify the firmware recovers from transient I2C errors and bus lock states.
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Cause a transient I2C error (pull SDA low briefly, or unplug/replug sensor) and observe behavior.
+\item Verify firmware retries and recovers without crashing.
+\end{enumerate}
+
+Acceptance: PASS if firmware recovers and continues normal operation after transient I2C faults.
+
+Artifacts: serial logs and notes on actions performed.
+
+\subsection{Reset and watchdog behavior}
+Purpose: Verify that unexpected faults trigger safe resets and that DUT recovers to a known good state.
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Trigger a fault condition (e.g., deliberate memory allocation failure or watchdog kick test) and observe reset behavior.
+\item After reset, verify firmware reinitializes sensors and resumes normal operation.
+\end{enumerate}
+
+Acceptance: PASS if reset occurs and DUT resumes expected operation without manual intervention.
+
+Artifacts: pre/post reset logs and timestamps.
+
+\section{Combined / acceptance scenario}
+Purpose: End-to-end verification with all components active.
+
+Steps:
+\begin{enumerate}[noitemsep]
+\item Boot DUT, wait until sensors stabilize (5 minutes).
+\item Collect 3--5 readings per sensor and compare against references.
+\item Send telemetry via ESP-NOW or WiFi and verify peers receive data.
+\item Interact with the display; verify updates and responsiveness.
+\end{enumerate}
+
+Acceptance: PASS if all individual acceptance criteria are met and DUT remains stable during test.
+
+Artifacts: consolidated logs, CSVs and photos.
+
+\section{Test case recording template}
+Use this template for each manual test:
+\begin{longtable}{@{}p{3cm}p{10cm}@{}}
+ID & TEST-xxx \\
+Title & Short descriptive name \\
+Purpose & What the test verifies \\
+Preconditions & Hardware and configuration \\
+Steps & Ordered steps taken \\
+Measurements & Data collected (CSV filenames) \\
+Acceptance criteria & Numeric/boolean criteria used \\
+Result & PASS / FAIL \\
+Artifacts & Filenames and locations \\
+Notes & Observations, troubleshooting steps \\
+\end{longtable}
+
+\section{Recommended test order}
+\begin{enumerate}[noitemsep]
+\item Visual inspection and power checks
+\item Sensor connectivity and basic reads (DHT22, BH1750, anemometer)
+\item Display verification
+\item Stepper motor functional test
+\item Communications (ESP-NOW then WiFi)
+\item Power and soak tests
+\item Reset/Watchdog and I2C recovery tests
+\end{enumerate}
+
+\section{Troubleshooting guidance}
+\begin{itemize}[noitemsep]
+\item Swap suspected faulty hardware with a known-good module to isolate failures.
+\item Reduce RF interference if ESP-NOW results are poor; move DUT and peer closer.
+\item If I2C locks, power-cycle bus devices and observe recovery.
+\end{itemize}
+
+\section{References}
+\begin{itemize}[noitemsep]
+\item \href{./weatherStation/src/managers/SensorManager.cpp}{\texttt{weatherStation/src/managers/SensorManager.cpp:1}}
+\item \href{./weatherStation/src/managers/CommManager.cpp}{\texttt{weatherStation/src/managers/CommManager.cpp:1}}
+\item \href{./weatherStation/src/managers/EspNowManager.cpp}{\texttt{weatherStation/src/managers/EspNowManager.cpp:1}}
+\end{itemize}
+
+\section{Changelog}
+\begin{itemize}[noitemsep]
+\item 2025-10-02: Expanded manual test procedures with acceptance criteria and additional stability \& recovery tests.
+\end{itemize}
+
+\end{document}
