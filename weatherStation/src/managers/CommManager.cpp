@@ -9,7 +9,9 @@ CommManager::CommManager() {}
 
 void CommManager::begin() {
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true);
+  // Non-destructive disconnect: don't pass 'true' which can stop/deinit WiFi driver
+  // and on some SDK versions may also de-initialize ESP-NOW.
+  WiFi.disconnect();
   vTaskDelay(pdMS_TO_TICKS(100));
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 

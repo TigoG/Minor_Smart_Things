@@ -19,8 +19,8 @@ const char* WIFI_SSID = secret::WIFI_SSID;
 const char* WIFI_PASS = secret::WIFI_PASS;
 const char* SERVER_URL = secret::SERVER_URL;
 
-// ESP-NOW peer (broadcast default)
-uint8_t actuatorMac[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+// ESP-NOW peer
+uint8_t actuatorMac[6] = {0x70, 0xB8, 0xF6, 0x5D, 0x12, 0xCC};
 
 // Manager instances
 static SensorManager* gSensorManager = nullptr;

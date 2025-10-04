@@ -1,0 +1,36 @@
+#include <Arduino.h>
+#include <WiFi.h>
+
+// This array will store the MAC address in uint8_t format
+uint8_t actuatorMac[6] = {0};
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+
+    // Set Wi-Fi to station mode to ensure correct MAC retrieval
+    WiFi.mode(WIFI_STA);
+    delay(100);
+
+    // Print current WiFi channel for diagnostics
+    Serial.printf("Actuator WiFi channel: %d\n", WiFi.channel());
+
+    // Get MAC as bytes
+    WiFi.macAddress(actuatorMac);
+
+    // Print MAC as String
+    String macStr = WiFi.macAddress();
+    Serial.println("MAC (String): " + macStr);
+
+    // Print MAC as uint8_t array
+    Serial.print("MAC (bytes): ");
+    for (int i = 0; i < 6; i++) {
+        Serial.printf("0x%02X", actuatorMac[i]);
+        if (i < 5) Serial.print(",");
+    }
+    Serial.println(";");
+}
+
+void loop() {
+    // Nothing else needed
+}

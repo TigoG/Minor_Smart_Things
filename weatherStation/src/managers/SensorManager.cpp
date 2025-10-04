@@ -25,6 +25,13 @@ SensorManager::SensorManager(uint32_t intervalMs)
 
 void SensorManager::begin() {
   Wire.begin(SDA_PIN, SCL_PIN);
+
+  // Initialize BH1750 (GY-30) in continuous high-res mode
+  Wire.beginTransmission(BH1750_ADDR);
+  Wire.write(BH1750_CONTINUOUS_HIGH_RES_MODE);
+  Wire.endTransmission();
+  delay(200);
+
   dht.begin();
   pinMode(HALL_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(HALL_PIN), hallISR, FALLING);
@@ -85,16 +92,54 @@ void SensorManager::task() {
 }
 
 float SensorManager::readLuxBH1750() {
+  // Read BH1750 in continuous high-res mode (initialized in begin())
   Wire.beginTransmission(BH1750_ADDR);
-  Wire.write(BH1750_ONE_TIME_HIGH_RES_MODE);
-  Wire.endTransmission();
-  vTaskDelay(pdMS_TO_TICKS(180));
+  Wire.endTransmission(); // ensure device ready
   Wire.requestFrom(BH1750_ADDR, (uint8_t)2);
+
+  // 5-sample moving average with basic sanity/clamp checks
+  static const int BUF_SIZE = 5;
+  static float buf[BUF_SIZE] = {NAN, NAN, NAN, NAN, NAN};
+  static int idx = 0;
+  static int count = 0;
+  static float sum = 0.0f;
+
   if (Wire.available() == 2) {
     uint16_t raw = Wire.read();
     raw <<= 8;
     raw |= Wire.read();
-    return raw / 1.2f;
+    float lux = raw / 1.2f;
+
+    // Clamp to plausible BH1750 range
+    if (isnan(lux) || lux < 0.0f || lux > 120000.0f) {
+      // invalid reading, return previous average if available
+      if (count > 0) return sum / (float)count;
+      return NAN;
+    }
+
+    // basic spike rejection: if we have previous avg and new lux is > 10x avg and > 10000, ignore it
+    if (count > 0) {
+      float avg = sum / (float)count;
+      if (lux > avg * 10.0f && lux > 10000.0f) {
+        return avg;
+      }
+    }
+
+    // add to circular buffer
+    if (count < BUF_SIZE) {
+      buf[idx] = lux;
+      sum += lux;
+      count++;
+    } else {
+      sum -= buf[idx];
+      buf[idx] = lux;
+      sum += lux;
+    }
+    idx = (idx + 1) % BUF_SIZE;
+    return sum / (float)count;
   }
+
+  // No data available: return previous average if any
+  if (count > 0) return sum / (float)count;
   return NAN;
 }

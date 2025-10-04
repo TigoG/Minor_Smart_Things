@@ -26,6 +26,7 @@ static constexpr uint8_t PULSES_PER_REV = 1;
 // BH1750
 static constexpr uint8_t BH1750_ADDR = 0x23;
 static constexpr uint8_t BH1750_ONE_TIME_HIGH_RES_MODE = 0x20;
+static constexpr uint8_t BH1750_CONTINUOUS_HIGH_RES_MODE = 0x10;
 
 // Timing
 static constexpr unsigned long MEAS_INTERVAL_MS = 2000;

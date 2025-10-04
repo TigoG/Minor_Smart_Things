@@ -46,9 +46,21 @@ void DisplayManager::task() {
       display.print(payload.wind_kmh, 1);
       display.print("km/h");
       display.setCursor(0, 44);
-      display.print("Light:");
-      if (!isnan(payload.lux)) display.print(payload.lux, 0); else display.print("--");
-      display.print("lx");
+      display.setTextSize(1);
+      // Clear the entire bottom area and print formatted lux field as a single string
+      display.fillRect(0, 44, SCREEN_WIDTH, 20, SSD1306_BLACK);
+      display.setTextSize(1);
+      {
+        char buf[24];
+        if (!isnan(payload.lux)) {
+          int lux_int = (int)(payload.lux + 0.5f);
+          snprintf(buf, sizeof(buf), "Light: %d lx", lux_int);
+        } else {
+          snprintf(buf, sizeof(buf), "Light: -- lx");
+        }
+        display.setCursor(0, 44);
+        display.print(buf);
+      }
       display.display();
     }
   }
