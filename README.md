@@ -20,7 +20,6 @@ Minor Smart Things contains firmware, hardware notes and documentation for small
 
 ## Goals
 
-- Provide compact, extensible open-source examples for low-power environmental sensing and actuator control.
 - Use standard protocols (MQTT/HTTP) and secure transport where possible.
 - Make it easy to build, test and deploy firmware using PlatformIO and common commodity parts.
 
