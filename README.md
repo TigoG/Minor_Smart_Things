@@ -114,7 +114,6 @@ MQTT example (topics/payload):
 {
   "light": 123,
   "wind_speed": 1.7,
-  "wind_dir": 270,
   "temp": 21.5,
   "humidity": 55.1
 }
