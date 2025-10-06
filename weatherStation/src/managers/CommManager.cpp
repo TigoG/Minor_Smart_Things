@@ -1,5 +1,5 @@
-#include "managers/CommManager.h"
-#include "managers/Common.h"
+#include "CommManager.h"
+#include "Common.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <freertos/FreeRTOS.h>

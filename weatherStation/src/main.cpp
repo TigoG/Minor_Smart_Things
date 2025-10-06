@@ -1,10 +1,10 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include "managers/Common.h"
-#include "managers/SensorManager.h"
-#include "managers/EspNowManager.h"
-#include "managers/CommManager.h"
-#include "managers/DisplayManager.h"
+#include "Common.h"
+#include "SensorManager.h"
+#include "EspNowManager.h"
+#include "CommManager.h"
+#include "DisplayManager.h"
 #include "secret.h"
 
 // Global objects declared in Common.h

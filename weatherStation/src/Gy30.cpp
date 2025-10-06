@@ -6,7 +6,7 @@
  * setup()/loop() symbols and to provide an optional helper.
  */
 
-#include "managers/Common.h"
+#include "Common.h"
 #include <Wire.h>
 
 /*

@@ -1,5 +1,5 @@
-#include "managers/SensorManager.h"
-#include "managers/Common.h"
+#include "SensorManager.h"
+#include "Common.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <DHT.h>

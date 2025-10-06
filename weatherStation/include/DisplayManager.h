@@ -1,7 +1,7 @@
 #ifndef MANAGERS_DISPLAYMANAGER_H
 #define MANAGERS_DISPLAYMANAGER_H
 
-#include "managers/Common.h"
+#include "Common.h"
 
 class DisplayManager {
 public:

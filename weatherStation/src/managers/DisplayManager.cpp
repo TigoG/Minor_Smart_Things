@@ -1,5 +1,5 @@
-#include "managers/DisplayManager.h"
-#include "managers/Common.h"
+#include "DisplayManager.h"
+#include "Common.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 

@@ -1,5 +1,5 @@
-#include "managers/EspNowManager.h"
-#include "managers/Common.h"
+#include "EspNowManager.h"
+#include "Common.h"
 #include <WiFi.h>
 #include <esp_now.h>
 #include <freertos/FreeRTOS.h>

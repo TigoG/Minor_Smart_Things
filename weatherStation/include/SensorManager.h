@@ -1,7 +1,7 @@
 #ifndef MANAGERS_SENSORMANAGER_H
 #define MANAGERS_SENSORMANAGER_H
 
-#include "managers/Common.h"
+#include "Common.h"
 #include <DHT.h>
 
 class SensorManager {

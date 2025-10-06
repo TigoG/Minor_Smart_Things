@@ -1,7 +1,7 @@
 #ifndef MANAGERS_COMMMANAGER_H
 #define MANAGERS_COMMMANAGER_H
 
-#include "managers/Common.h"
+#include "Common.h"
 
 class CommManager {
 public:

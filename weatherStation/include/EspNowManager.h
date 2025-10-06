@@ -1,7 +1,7 @@
 #ifndef MANAGERS_ESPNOWMANAGER_H
 #define MANAGERS_ESPNOWMANAGER_H
 
-#include "managers/Common.h"
+#include "Common.h"
 #include <esp_now.h>
 
 class EspNowManager {
