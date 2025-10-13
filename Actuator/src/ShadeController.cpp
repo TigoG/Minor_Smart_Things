@@ -30,16 +30,33 @@ static const unsigned long STATE_CHANGE_LOCK_MS = 5000UL;
 static unsigned long s_lastActionMillis = 0;
 
 /* Constructor ----------------------------------------------------------------*/
-ShadeController::ShadeController(StepperController &stepper,
-                                float defaultAngle,
-                                unsigned long upDuration,
-                                unsigned long downDuration)
-  : stepper_(stepper),
-    defaultAngle_(defaultAngle),
-    upDuration_(upDuration),
-    downDuration_(downDuration) {}
+ShadeController::ShadeController(int servoPin,
+                                 float defaultAngle,
+                                 unsigned long upDuration,
+                                 unsigned long downDuration)
+  : _servoPin(servoPin),
+    _currentAngle(0.0f),
+    _defaultAngle(defaultAngle),
+    _upDuration(upDuration),
+    _downDuration(downDuration) {}
 
-ShadeController::~ShadeController() {}
+ShadeController::~ShadeController() {
+  _servo.detach();
+}
+
+void ShadeController::begin() {
+  _servo.attach(_servoPin);
+  setServoAngle(0.0f); // start closed
+  Serial.printf("ShadeController: servo attached to pin %d\n", _servoPin);
+}
+
+void ShadeController::setServoAngle(float angleDeg) {
+  if (angleDeg < 0.0f) angleDeg = 0.0f;
+  if (angleDeg > 180.0f) angleDeg = 180.0f;
+  _servo.write((int)round(angleDeg));
+  _currentAngle = angleDeg;
+  delay(20); // let servo start moving
+}
 
 void ShadeController::handleMessage(const uint8_t *data, int len) {
   if (len <= 0 || data == nullptr) return;
@@ -50,8 +67,8 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
     if (data[i] < 32 || data[i] > 126) { printable = false; break; }
   }
 
-  float angle = defaultAngle_;
-  unsigned long duration = upDuration_;
+  float angle = _defaultAngle;
+  unsigned long duration = _upDuration;
   bool doUp = false;
   bool doDown = false;
 
@@ -111,10 +128,6 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
       bool tempValid = !isnan(payload.tempC);
       bool luxValid = !isnan(payload.lux);
 
-      // Sensor-based decision with new thresholds and state checks:
-      // - CLOSE if temp <= CLOSE_TEMP_THRESHOLD OR lux <= CLOSE_LUX_THRESHOLD
-      // - OPEN  if temp >= OPEN_TEMP_THRESHOLD OR lux >= OPEN_LUX_THRESHOLD
-      // Start state is CLOSED; avoid repeated/rapid toggles using a short lock.
       if (tempValid || luxValid) {
         bool triggerOpen = false;
         bool triggerClose = false;
@@ -137,8 +150,7 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
             Serial.println("Policy: action locked - ignoring rapid changes.");
           } else {
             Serial.println("Policy: CLOSE triggered -> performing DOWN");
-            performDown(defaultAngle_, downDuration_);
-            // performDown will update state and s_lastActionMillis
+            performDown(_defaultAngle, _downDuration);
           }
         } else if (triggerOpen) {
           if (s_shadeState == SHADE_OPEN) {
@@ -147,8 +159,7 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
             Serial.println("Policy: action locked - ignoring rapid changes.");
           } else {
             Serial.println("Policy: OPEN triggered -> performing UP");
-            performUp(defaultAngle_, upDuration_);
-            // performUp will update state and s_lastActionMillis
+            performUp(_defaultAngle, _upDuration);
           }
         } else {
           Serial.println("Policy: sensors present but do not trigger action.");
@@ -158,10 +169,10 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
       }
     } else {
       if (data[0] == 1 || data[0] == 'U' || data[0] == 'u') {
-        duration = upDuration_;
+        duration = _upDuration;
         performUp(angle, duration);
       } else if (data[0] == 2 || data[0] == 'D' || data[0] == 'd') {
-        duration = downDuration_;
+        duration = _downDuration;
         performDown(angle, duration);
       } else {
         Serial.printf("Unknown binary command: 0x%02X\n", data[0]);
@@ -177,9 +188,22 @@ void ShadeController::performUp(float angle, unsigned long durationMs) {
   }
   s_shadeState = SHADE_MOVING;
   Serial.println("performUp: moving to OPEN");
-  stepper_.moveAngle(angle, durationMs, true);
-  delay(50);
-  stepper_.moveAngle(angle, durationMs, false);
+
+  float target = angle;
+  if (target < 0.0f) target = 0.0f;
+  if (target > 180.0f) target = 180.0f;
+
+  float start = _currentAngle;
+  int steps = 20;
+  if (durationMs == 0) durationMs = 500;
+  unsigned long stepDelay = durationMs / (unsigned long)steps;
+
+  for (int i = 1; i <= steps; ++i) {
+    float a = start + ((target - start) * (float)i / (float)steps);
+    setServoAngle(a);
+    if (stepDelay >= 1) delay(stepDelay);
+  }
+
   s_shadeState = SHADE_OPEN;
   s_lastActionMillis = millis();
   Serial.println("performUp: complete, state=OPEN");
@@ -192,9 +216,19 @@ void ShadeController::performDown(float angle, unsigned long durationMs) {
   }
   s_shadeState = SHADE_MOVING;
   Serial.println("performDown: moving to CLOSED");
-  stepper_.moveAngle(angle, durationMs, false);
-  delay(50);
-  stepper_.moveAngle(angle, durationMs, true);
+
+  float target = 0.0f; // closed position
+  float start = _currentAngle;
+  int steps = 20;
+  if (durationMs == 0) durationMs = 500;
+  unsigned long stepDelay = durationMs / (unsigned long)steps;
+
+  for (int i = 1; i <= steps; ++i) {
+    float a = start + ((target - start) * (float)i / (float)steps);
+    setServoAngle(a);
+    if (stepDelay >= 1) delay(stepDelay);
+  }
+
   s_shadeState = SHADE_CLOSED;
   s_lastActionMillis = millis();
   Serial.println("performDown: complete, state=CLOSED");

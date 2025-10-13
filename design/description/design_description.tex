@@ -1,0 +1,170 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{parskip}
+
+\title{Design Description -- Minor Smart Things}
+\author{Tigo Goes}
+\date{\today}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This document explains why each component in the project was selected and how it is used (electrically, mechanically and in firmware). The description covers the weather-station node and the actuator options used across the repository.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Scope and sources}
+This description was prepared from the project's Bill of Materials and specification files. See the Bill of Materials: \texttt{design/bom/bom.tex} and the system specification: \texttt{design/spec.md}. The firmware mapping and manager responsibilities are taken from the header interfaces in the repository (SensorManager, DisplayManager, CommManager).
+
+\section{System overview}
+The project is a small distributed weather-station and actuator system. The weather-station measures temperature, humidity, wind speed, and ambient light. An actuator subsystem controls a sunshade; the system uses an MG90 hobby servo for shade actuation.
+
+\section{Components --- rationale and usage}
+The list below follows the Bill of Materials and the specification.
+
+\subsection{ESP32 (Wi‑Fi / Bluetooth microcontroller)}
+\textbf{Why chosen:} Combines Wi‑Fi, adequate I/O, and hardware PWM/LEDC channels; widely supported by PlatformIO/Arduino; low cost.
+
+\textbf{How used:}
+\begin{itemize}
+\item Runs firmware responsible for sampling sensors, driving the display, running the shade logic, and publishing JSON to a server.
+\item I2C master for the lux sensor and (optionally) the OLED.
+\item Handles interrupts for the anemometer (Hall sensor) to measure wind speed.
+\end{itemize}
+
+\subsection{BH1750 (I2C lux sensor)}
+\textbf{Why chosen:} Simple digital lux reading, factory calibrated, direct lux units, easy integration over I2C.
+
+\textbf{How used:}
+\begin{itemize}
+\item Connected via I2C (SDA, SCL) to the ESP32 (see pin mapping).
+\item Firmware reads lux periodically (1--5 s) and supplies values to the shade control logic.
+\item Requires 4.7\,k pull‑ups to 3.3\,V on SDA/SCL if the breakout lacks them.
+\end{itemize}
+
+\subsection{DHT22 (Temperature \& Humidity)}
+\textbf{Why chosen:} Inexpensive, easy-to-use digital sensor for T\&RH; adequate accuracy for the project goals.
+
+\textbf{How used:}
+\begin{itemize}
+\item Single‑wire data line connected to an ESP32 GPIO with a 4.7--10\,k pull‑up.
+\item Sampled on a slow cadence (e.g., once every 2--10\,s) to reduce noise and timing conflicts.
+\item Managed by SensorManager (see \texttt{weatherStation/include/SensorManager.h}).
+\end{itemize}
+
+\subsection{A3144 (Hall‑effect sensor) --- anemometer}
+\textbf{Why chosen:} Digital pulse output for robust counting; simple mounting; low cost.
+
+\textbf{How used:}
+\begin{itemize}
+\item A magnet is mounted in the anemometer hub; each pass triggers the Hall switch.
+\item Output wired to an interrupt‑capable ESP32 GPIO with a 10\,k pull‑up.
+\item Debounce / edge‑counting handled in firmware; pulses per revolution configurable (spec default = 2).
+\end{itemize}
+
+\subsection*{Wind direction}
+Wind direction sensing has been removed from this design. The system focuses on temperature, humidity, wind speed, and ambient light.
+
+\subsection{OLED 0.96" SSD1306 (I2C)}
+\textbf{Why chosen:} Compact, readable at low power, I2C interface simplifies wiring.
+
+\textbf{How used:}
+\begin{itemize}
+\item Shows measured values and status messages; managed by DisplayManager.
+\item Typically wired to the same I2C bus as BH1750; ensure address conflicts are resolved (0x3C/0x3D).
+\end{itemize}
+
+\subsection{Servo (MG90) --- sunshade actuator}
+\textbf{Why chosen:} MG90 is a compact metal‑geared hobby servo selected because it provides the torque margin needed for the sunshade, reliable positional repeatability for many open/close cycles, and a small form factor that fits the designed mounts.
+
+\textbf{How used:}
+\begin{itemize}
+\item Control via a PWM capable GPIO on the ESP32; use an LEDC channel for stable PWM.
+\item Power the MG90 from a dedicated 5\,V supply capable of 1--2\,A peaks; common ground with ESP32.
+\item Use a series 100\,$\Omega$ resistor on the signal line and a bulk cap (100--470\,µF) on the servo rail to smooth transients.
+\end{itemize}
+
+\subsection{Jumper cables, connectors and 3D‑printed parts}
+\textbf{Why chosen:} Required for prototyping and housing. 3D printed brackets provide mounting and environmental shielding.
+
+\textbf{How used:}
+\begin{itemize}
+\item Use quality connectors for external sensors; route servo cable through a cable gland for weatherproofing.
+\item Print moving parts in PETG/ASA for outdoor durability (spec recommends this).
+\end{itemize}
+
+\subsection{Neodymium magnet}
+\textbf{Why chosen:} Small strong magnet for triggering the Hall sensor on anemometer rotor.
+
+\textbf{How used:}
+\begin{itemize}
+\item Secure magnet in rotor hub; choose size/grade to reliably trigger the Hall switch without unbalancing rotor.
+\end{itemize}
+
+\section{Electrical design notes and wiring}
+\begin{itemize}
+\item Logic domain: ESP32 operates at 3.3\,V. Tie sensor pull‑ups to 3.3\,V.
+\item I2C: SDA $\rightarrow$ GPIO21, SCL $\rightarrow$ GPIO22 (default mapping in spec).
+\item Use 0.1\,µF decoupling near each sensor and a 100\,µF bulk cap on the 5\,V rail.
+\item Servo 5\,V supply must be able to handle peak current; do not power high current loads from the ESP32 3.3\,V regulator.
+\item Common ground: All grounds (ESP32, 5\,V servo rail, motor drivers) must be common reference.
+\end{itemize}
+
+\section{Firmware mapping and responsibilities}
+The repository provides manager classes that separate concerns:
+\begin{itemize}
+\item SensorManager: reads DHT22, BH1750, and wind speed edge counts; exposes read functions and periodic sampling (see \texttt{weatherStation/include/SensorManager.h}).
+\item DisplayManager: updates the SSD1306 OLED with human‑readable information.
+\item CommManager: packages sensor data into a JSON payload and publishes to server (see \texttt{weatherStation/include/CommManager.h}).
+\end{itemize}
+
+\subsection{ESP32 pin assignments (from specification)}
+\begin{tabular}{llp{8cm}}
+GPIO & Purpose & Notes \\
+\midrule
+21 & I2C SDA & BH1750 / OLED SDA \\
+22 & I2C SCL & BH1750 / OLED SCL \\
+16 & DHT22 DATA & 4.7--10\,k pull‑up \\
+4 & Wind‑speed Hall input & attachInterrupt capable; 10\,k pull‑up \\
+5 & Sunshade servo PWM & PWM signal, servo powered from 5\,V rail \\
+2 & Status LED & 220\,$\Omega$ series resistor \\
+\end{tabular}
+
+\section{Calibration and testing}
+\begin{itemize}
+\item Wind speed: measure pulses per revolution and calibrate k\_speed against a reference (spec suggests placeholder k = 2.2\,m/rev).
+\item Lux: compare BH1750 readings with a handheld lux meter and adjust logic thresholds (lux\_close\_threshold, lux\_open\_threshold).
+\item Shade control: run repeated open/close cycles; ensure servos move to stored angles; tune hysteresis and dwell times to avoid oscillation.
+\end{itemize}
+
+\section{Alternatives and trade‑offs}
+\begin{itemize}
+\item Replace DHT22 with a higher‑accuracy sensor (e.g., SHT31) for better humidity/temperature performance.
+\item Use TSL2561 instead of BH1750 for adjustable gains and better low‑light response.
+\item Use a magnetic encoder or potentiometer for absolute shade position feedback if higher reliability is needed.
+\end{itemize}
+
+\section{Mechanical notes}
+\begin{itemize}
+\item 3D printed mounts should include drainage and mounting bosses for bearings.
+\item Use stainless hardware for outdoor deployment and consider conformal coating for electronics.
+\end{itemize}
+
+\section{References}
+Bill of Materials: design/bom/bom.tex \\
+Specification: design/spec.md \\
+Firmware interfaces: \texttt{weatherStation/include/SensorManager.h}, \texttt{weatherStation/include/DisplayManager.h}, \texttt{weatherStation/include/CommManager.h}
+
+\end{document}

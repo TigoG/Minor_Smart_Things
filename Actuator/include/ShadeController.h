@@ -2,11 +2,10 @@
 #define SHADE_CONTROLLER_H
 
 #include <Arduino.h>
-#include "StepperController.h"
+#include <ESP32Servo.h>
 #include <stdint.h>
 
 // Sensor payload layout shared with weatherStation
-// typedef struct __attribute__((packed)) { float tempC; float humidity; float lux; float wind_kmh; uint32_t seq; } SensorPayload;
 typedef struct __attribute__((packed)) {
   float tempC;
   float humidity;
@@ -17,21 +16,28 @@ typedef struct __attribute__((packed)) {
 
 class ShadeController {
 public:
-  ShadeController(StepperController &stepper,
+  ShadeController(int servoPin,
                   float defaultAngle = 45.0f,
                   unsigned long upDuration = 5000UL,
                   unsigned long downDuration = 10000UL);
 
   ~ShadeController();
 
+  // Attach servo and perform any initialization
+  void begin();
+
+  // Handle incoming messages (ASCII or binary SensorPayload)
   void handleMessage(const uint8_t *data, int len);
 
 private:
-  StepperController &stepper_;
-  float defaultAngle_;
-  unsigned long upDuration_;
-  unsigned long downDuration_;
+  Servo _servo;
+  int _servoPin;
+  float _currentAngle;
+  float _defaultAngle;
+  unsigned long _upDuration;
+  unsigned long _downDuration;
 
+  void setServoAngle(float angleDeg);
   void performUp(float angle, unsigned long durationMs);
   void performDown(float angle, unsigned long durationMs);
 };
