@@ -2,7 +2,6 @@
 #define MANAGERS_SENSORMANAGER_H
 
 #include "Common.h"
-#include <DHT.h>
 
 class SensorManager {
 public:
@@ -12,11 +11,13 @@ public:
 private:
   uint32_t _intervalMs;
   uint32_t _seq;
-  DHT dht;
 
   static void taskEntry(void* pv);
   void task();
   float readLuxBH1750();
+
+  // Bit-banged DHT22 reader (implemented in the .cpp)
+  bool readDHT22(float &tempC, float &humidity);
 };
 
 #endif // MANAGERS_SENSORMANAGER_H
