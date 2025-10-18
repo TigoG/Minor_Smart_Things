@@ -25,9 +25,13 @@ public:
 
   // Attach servo and perform any initialization
   void begin();
-
-  // Handle incoming messages (ASCII or binary SensorPayload)
+///////
+// Handle incoming messages (ASCII or binary SensorPayload)
   void handleMessage(const uint8_t *data, int len);
+
+  // Pulse to an angle, hold for holdMs milliseconds, then return to closed (0).
+  // moveDurationMs specifies how long the motion to/from the target should take (ms).
+  void pulseAngle(float angleDeg, unsigned long holdMs, unsigned long moveDurationMs = 500UL);
 
 private:
   Servo _servo;

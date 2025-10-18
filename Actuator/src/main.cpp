@@ -2,18 +2,23 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include "ShadeController.h"
+#include "CommandProcessor.h"
 #include <stdlib.h>
 #include <string.h>
 
 // Default pin for MG90 servo
-const int SERVO_PIN = 5; // change to match your wiring
+const int SERVO_PIN = 4;
 
 // Default motion parameters
 const float DEFAULT_ANGLE = 45.0f;
 const unsigned long DEFAULT_UP_DURATION = 5000UL;   // 5s
 const unsigned long DEFAULT_DOWN_DURATION = 10000UL; // 10s
 
-ShadeController *gShadeController = nullptr; // define the extern
+// define the extern from the header
+ShadeController *gShadeController = nullptr;
+
+// Command processor instance (owns parsing logic)
+CommandProcessor *gCommandProcessor = nullptr;
 
 void printHelp() {
   Serial.println("Available commands:");
@@ -21,7 +26,78 @@ void printHelp() {
   Serial.println("  SENSOR <tempC|NaN> <humidity|NaN> <lux|NaN> <wind_kmh|NaN> <seq>");
   Serial.println("  UP [angle] [duration_ms]");
   Serial.println("  DOWN [angle] [duration_ms]");
+  Serial.println("  OPEN [angle_rel] [hold_ms]");
+  Serial.println("  CLOSE [angle_rel] [hold_ms]");
+  Serial.println("  PULSE <angle_rel> <hold_ms> [move_ms]");
   Serial.println("  STATUS");
+}
+
+void handleSensorCommand() {
+  if (!gShadeController) { Serial.println("No ShadeController instance"); return; }
+  float temp = NAN, hum = NAN, lux = NAN, wind = NAN;
+  uint32_t seq = 0;
+  char *tok = strtok(NULL, " \t"); if (tok) temp = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) hum  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) lux  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) wind = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) seq = (uint32_t)strtoul(tok, NULL, 10);
+
+  SensorPayload payload;
+  payload.tempC = temp;
+  payload.humidity = hum;
+  payload.lux = lux;
+  payload.wind_kmh = wind;
+  payload.seq = seq;
+
+  Serial.printf("Injecting sensor: temp=%0.1f hum=%0.1f lux=%0.1f wind=%0.2f seq=%u\n",
+                payload.tempC, payload.humidity, payload.lux, payload.wind_kmh, payload.seq);
+
+  gShadeController->handleMessage((const uint8_t *)&payload, sizeof(payload));
+}
+
+void handleUpDownCommand(bool isUp) {
+  float angle = DEFAULT_ANGLE;
+  unsigned long duration = isUp ? DEFAULT_UP_DURATION : DEFAULT_DOWN_DURATION;
+  char *tok = strtok(NULL, " \t"); if (tok) angle = atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) duration = (unsigned long)strtoul(tok, NULL, 10);
+
+  String payload = isUp ? "up" : "down";
+  payload += " angle:";
+  payload += String(angle, 1);
+  payload += " duration:";
+  payload += String(duration);
+
+  Serial.printf("Injecting command: %s\n", payload.c_str());
+  if (gShadeController) gShadeController->handleMessage((const uint8_t *)payload.c_str(), payload.length());
+}
+
+void handleOpenCloseCommand(bool isOpen) {
+  if (!gShadeController) { Serial.println("No ShadeController instance"); return; }
+  float angle_rel = DEFAULT_ANGLE; // relative to baseline
+  unsigned long hold = DEFAULT_UP_DURATION;
+  char *tok = strtok(NULL, " \t"); if (tok) angle_rel = atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) hold = (unsigned long)strtoul(tok, NULL, 10);
+
+  if (isOpen) {
+    Serial.printf("OPEN: pulse +%0.1f for %lu ms\n", angle_rel, hold);
+    gShadeController->pulseAngle(angle_rel, hold);
+  } else {
+    Serial.printf("CLOSE: pulse -%0.1f for %lu ms\n", angle_rel, hold);
+    gShadeController->pulseAngle(-angle_rel, hold);
+  }
+}
+
+void handlePulseCommand() {
+  if (!gShadeController) { Serial.println("No ShadeController instance"); return; }
+  float angle_rel = 0.0f;
+  unsigned long hold = DEFAULT_UP_DURATION;
+  unsigned long move_ms = 500UL;
+  char *tok = strtok(NULL, " \t"); if (tok) angle_rel = atof(tok);
+  tok = strtok(NULL, " \t"); if (tok) hold = (unsigned long)strtoul(tok, NULL, 10);
+  tok = strtok(NULL, " \t"); if (tok) move_ms = (unsigned long)strtoul(tok, NULL, 10);
+
+  Serial.printf("PULSE: angle=%0.1f hold=%lu move=%lu\n", angle_rel, hold, move_ms);
+  gShadeController->pulseAngle(angle_rel, hold, move_ms);
 }
 
 void processSerialLine(String line) {
@@ -36,52 +112,13 @@ void processSerialLine(String line) {
   cmd.toUpperCase();
 
   if (cmd == "HELP") { printHelp(); return; }
-
-  if (cmd == "SENSOR") {
-    if (!gShadeController) { Serial.println("No ShadeController instance"); return; }
-    float temp = NAN, hum = NAN, lux = NAN, wind = NAN;
-    uint32_t seq = 0;
-    tok = strtok(NULL, " \t"); if (tok) temp = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
-    tok = strtok(NULL, " \t"); if (tok) hum  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
-    tok = strtok(NULL, " \t"); if (tok) lux  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
-    tok = strtok(NULL, " \t"); if (tok) wind = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
-    tok = strtok(NULL, " \t"); if (tok) seq = (uint32_t)strtoul(tok, NULL, 10);
-
-    SensorPayload payload;
-    payload.tempC = temp;
-    payload.humidity = hum;
-    payload.lux = lux;
-    payload.wind_kmh = wind;
-    payload.seq = seq;
-
-    Serial.printf("Injecting sensor: temp=%0.1f hum=%0.1f lux=%0.1f wind=%0.2f seq=%u\n",
-                  payload.tempC, payload.humidity, payload.lux, payload.wind_kmh, payload.seq);
-
-    gShadeController->handleMessage((const uint8_t *)&payload, sizeof(payload));
-    return;
-  }
-
-  if (cmd == "UP" || cmd == "DOWN") {
-    float angle = DEFAULT_ANGLE;
-    unsigned long duration = (cmd == "UP") ? DEFAULT_UP_DURATION : DEFAULT_DOWN_DURATION;
-    tok = strtok(NULL, " \t"); if (tok) angle = atof(tok);
-    tok = strtok(NULL, " \t"); if (tok) duration = (unsigned long)strtoul(tok, NULL, 10);
-
-    String payload = (cmd == "UP") ? "up" : "down";
-    payload += " angle:";
-    payload += String(angle, 1);
-    payload += " duration:";
-    payload += String(duration);
-
-    Serial.printf("Injecting command: %s\n", payload.c_str());
-    if (gShadeController) gShadeController->handleMessage((const uint8_t *)payload.c_str(), payload.length());
-    return;
-  }
-
-  if (cmd == "STATUS") {
-    Serial.println("ShadeController configured.");
-    return;
-  }
+  if (cmd == "SENSOR") { handleSensorCommand(); return; }
+  if (cmd == "UP") { handleUpDownCommand(true); return; }
+  if (cmd == "DOWN") { handleUpDownCommand(false); return; }
+  if (cmd == "OPEN") { handleOpenCloseCommand(true); return; }
+  if (cmd == "CLOSE") { handleOpenCloseCommand(false); return; }
+  if (cmd == "PULSE") { handlePulseCommand(); return; }
+  if (cmd == "STATUS") { Serial.println("ShadeController configured."); return; }
 
   Serial.printf("Unknown command: %s\n", cmd.c_str());
   printHelp();
@@ -96,6 +133,9 @@ void setup() {
   gShadeController = new ShadeController(SERVO_PIN, DEFAULT_ANGLE, DEFAULT_UP_DURATION, DEFAULT_DOWN_DURATION);
   gShadeController->begin();
 
+  // create command processor and hand it the controller
+  gCommandProcessor = new CommandProcessor(gShadeController, DEFAULT_ANGLE, DEFAULT_UP_DURATION, DEFAULT_DOWN_DURATION);
+
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
   } else {
@@ -109,7 +149,7 @@ void setup() {
 void loop() {
   if (Serial.available()) {
     String line = Serial.readStringUntil('\n');
-    processSerialLine(line);
+    if (gCommandProcessor) gCommandProcessor->processLine(line);
   }
   delay(10);
 }

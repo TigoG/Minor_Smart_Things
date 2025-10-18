@@ -25,9 +25,13 @@ static const float CLOSE_LUX_THRESHOLD  = 15.0f;
 static const float OPEN_TEMP_THRESHOLD  = 23.0f;
 static const float OPEN_LUX_THRESHOLD   = 75.0f;
 
-// Simple lock to avoid rapid re-triggering when sensors fluctuate
+ // Simple lock to avoid rapid re-triggering when sensors fluctuate
 static const unsigned long STATE_CHANGE_LOCK_MS = 5000UL;
 static unsigned long s_lastActionMillis = 0;
+
+// The physical resting/baseline angle for the servo. We keep the servo at
+// BASELINE_ANGLE (90°) and treat UP/DOWN pulses relative to this angle.
+static const float BASELINE_ANGLE = 90.0f;
 
 /* Constructor ----------------------------------------------------------------*/
 ShadeController::ShadeController(int servoPin,
@@ -46,7 +50,7 @@ ShadeController::~ShadeController() {
 
 void ShadeController::begin() {
   _servo.attach(_servoPin);
-  setServoAngle(0.0f); // start closed
+  setServoAngle(BASELINE_ANGLE); // start at baseline (90°)
   Serial.printf("ShadeController: servo attached to pin %d\n", _servoPin);
 }
 
@@ -56,6 +60,52 @@ void ShadeController::setServoAngle(float angleDeg) {
   _servo.write((int)round(angleDeg));
   _currentAngle = angleDeg;
   delay(20); // let servo start moving
+}
+
+// Pulse to an angle relative to the baseline: move from the current position
+// to (BASELINE_ANGLE + angleDeg), hold for holdMs milliseconds, then return to
+// BASELINE_ANGLE. moveDurationMs controls how long each leg (to/from target)
+// should take.
+void ShadeController::pulseAngle(float angleDeg, unsigned long holdMs, unsigned long moveDurationMs) {
+  // clamp relative angle to a reasonable range
+  if (angleDeg < -180.0f) angleDeg = -180.0f;
+  if (angleDeg > 180.0f) angleDeg = 180.0f;
+
+  float target = BASELINE_ANGLE + angleDeg;
+  if (target < 0.0f) target = 0.0f;
+  if (target > 180.0f) target = 180.0f;
+
+  Serial.printf("pulseAngle: target=%0.1f hold=%lu moveDur=%lu\n", target, holdMs, moveDurationMs);
+
+  float start = _currentAngle;
+  const int steps = 20;
+  if (moveDurationMs == 0) moveDurationMs = 500;
+  unsigned long stepDelay = moveDurationMs / (unsigned long)steps;
+
+  s_shadeState = SHADE_MOVING;
+
+  // move to target
+  for (int i = 1; i <= steps; ++i) {
+    float a = start + ((target - start) * (float)i / (float)steps);
+    setServoAngle(a);
+    if (stepDelay >= 1) delay(stepDelay);
+  }
+
+  // hold
+  if (holdMs >= 1) delay(holdMs);
+
+  // move back to baseline
+  start = _currentAngle;
+  float baseline = BASELINE_ANGLE;
+  for (int i = 1; i <= steps; ++i) {
+    float a = start + ((baseline - start) * (float)i / (float)steps);
+    setServoAngle(a);
+    if (stepDelay >= 1) delay(stepDelay);
+  }
+
+  s_shadeState = SHADE_CLOSED;
+  s_lastActionMillis = millis();
+  Serial.println("pulseAngle: complete, returned to baseline");
 }
 
 void ShadeController::handleMessage(const uint8_t *data, int len) {
@@ -182,56 +232,27 @@ void ShadeController::handleMessage(const uint8_t *data, int len) {
 }
 
 void ShadeController::performUp(float angle, unsigned long durationMs) {
-  if (s_shadeState == SHADE_OPEN) {
-    Serial.println("performUp: already OPEN - skipping");
+  // Treat angle as relative to baseline and durationMs as the hold time at the
+  // target. Use a short movement duration for the motion itself.
+  if (s_shadeState == SHADE_MOVING) {
+    Serial.println("performUp: already MOVING - skipping");
     return;
   }
-  s_shadeState = SHADE_MOVING;
-  Serial.println("performUp: moving to OPEN");
-
-  float target = angle;
-  if (target < 0.0f) target = 0.0f;
-  if (target > 180.0f) target = 180.0f;
-
-  float start = _currentAngle;
-  int steps = 20;
-  if (durationMs == 0) durationMs = 500;
-  unsigned long stepDelay = durationMs / (unsigned long)steps;
-
-  for (int i = 1; i <= steps; ++i) {
-    float a = start + ((target - start) * (float)i / (float)steps);
-    setServoAngle(a);
-    if (stepDelay >= 1) delay(stepDelay);
-  }
-
-  s_shadeState = SHADE_OPEN;
-  s_lastActionMillis = millis();
-  Serial.println("performUp: complete, state=OPEN");
+  Serial.printf("performUp: pulsing baseline +%0.1f for %lu ms\n", angle, durationMs);
+  const unsigned long moveDur = 500UL;
+  pulseAngle(angle, durationMs, moveDur);
 }
 
 void ShadeController::performDown(float angle, unsigned long durationMs) {
-  if (s_shadeState == SHADE_CLOSED) {
-    Serial.println("performDown: already CLOSED - skipping");
+  // Treat angle as relative to baseline and durationMs as the hold time at the
+  // target. Use a short movement duration for the motion itself.
+  if (s_shadeState == SHADE_MOVING) {
+    Serial.println("performDown: already MOVING - skipping");
     return;
   }
-  s_shadeState = SHADE_MOVING;
-  Serial.println("performDown: moving to CLOSED");
-
-  float target = 0.0f; // closed position
-  float start = _currentAngle;
-  int steps = 20;
-  if (durationMs == 0) durationMs = 500;
-  unsigned long stepDelay = durationMs / (unsigned long)steps;
-
-  for (int i = 1; i <= steps; ++i) {
-    float a = start + ((target - start) * (float)i / (float)steps);
-    setServoAngle(a);
-    if (stepDelay >= 1) delay(stepDelay);
-  }
-
-  s_shadeState = SHADE_CLOSED;
-  s_lastActionMillis = millis();
-  Serial.println("performDown: complete, state=CLOSED");
+  Serial.printf("performDown: pulsing baseline -%0.1f for %lu ms\n", angle, durationMs);
+  const unsigned long moveDur = 500UL;
+  pulseAngle(-angle, durationMs, moveDur);
 }
 
 // ESP-NOW receive callback
