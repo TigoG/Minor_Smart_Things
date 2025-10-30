@@ -13,9 +13,9 @@
 #define OLED_RESET    -1
 
 // Pins and hardware defines
-#define DHTPIN 4
+#define DHTPIN 14
 #define DHTTYPE DHT22
-#define HALL_PIN 15
+#define HALL_PIN 27
 #define SDA_PIN 21
 #define SCL_PIN 22
 
