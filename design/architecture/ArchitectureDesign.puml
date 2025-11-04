@@ -31,8 +31,7 @@ package "Weather Station (Device)" as WS {
 
 package "External Systems" {
   node "Actuator ESP32 (peer)" as ActuatorESP
-  rectangle "Stepper Driver (A4988/DRV8825)" as StepperDriver
-  artifact "NEMA17 Stepper Motor" as NEMA17
+  rectangle "MG90 Servo (MG90 9g)" as MG90
   cloud "HTTP Server / Cloud" as Server
 }
 
@@ -70,8 +69,7 @@ EspNowTask --> ActuatorESP : ESP-NOW message (peer/broadcast)
 EspNowTask --> Serial : send status
 
 ' Actuator chain
-ActuatorESP --> StepperDriver : step / direction signals
-StepperDriver --> NEMA17 : motor drive
+ActuatorESP --> MG90 : PWM signal (servo control)
 
 note right of SensorTask
 sensor_payload: temp, humidity, lux, wind_kmh, seq
