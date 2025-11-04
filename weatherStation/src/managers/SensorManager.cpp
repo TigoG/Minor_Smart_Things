@@ -55,19 +55,28 @@
      pulseCount = 0;
      interrupts();
 
-     float revs = (float)pulses / (float)PULSES_PER_REV;
-     float revs_per_sec = revs / (_intervalMs / 1000.0f);
-     const float PI_f = 3.14159265358979323846f;
-     float linear_speed_m_s = revs_per_sec * (2.0f * PI_f * ANEMOMETER_RADIUS_M);
-     float wind_kmh = linear_speed_m_s * 3.6f;
-
+     // Use pulses per second and apply calibration to convert to km/h:
+     // calibration: wind_kmh = 1.716 * pulses_per_sec + 11.249 (R^2 = 0.9901)
+     float pulses_per_sec = (float)pulses / (_intervalMs / 1000.0f);
+     float wind_kmh;
+     // Treat tiny pulse rates as zero (noise floor)
+     if (pulses_per_sec < 0.05f) {
+       wind_kmh = 0.0f;
+     } else {
+       wind_kmh = 1.716f * pulses_per_sec + 11.249f;
+     }
+     // Legacy physical conversion (kept as reference):
+     // const float PI_f = 3.14159265358979323846f;
+     // float linear_speed_m_s = (pulses_per_sec / (float)PULSES_PER_REV) * (2.0f * PI_f * ANEMOMETER_RADIUS_M);
+     // float wind_kmh = linear_speed_m_s * 3.6f;
+     
      float tempC, humidity;
      if (!readDHT22(tempC, humidity)) {
        tempC = NAN;
        humidity = NAN;
      }
      float lux = readLuxBH1750();
-
+     
      sensor_payload_t payload;
      payload.tempC = tempC;
      payload.humidity = humidity;
@@ -75,7 +84,7 @@
      payload.wind_kmh = wind_kmh;
      payload.seq = ++_seq;
 
-     Serial.printf("Sensor: seq=%u temp=%0.1f hum=%0.1f wind=%0.2f lux=%0.1f\n",
+     Serial.printf("Sensor: seq=%u temp=%0.1f hum=%0.1f wind=%0.2f km/h lux=%0.1f\n",
                    payload.seq,
                    isnan(payload.tempC) ? NAN : payload.tempC,
                    isnan(payload.humidity) ? NAN : payload.humidity,

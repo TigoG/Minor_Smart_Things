@@ -20,9 +20,9 @@
 #define SCL_PIN 22
 
 // Anemometer params
-static constexpr float ANEMOMETER_RADIUS_M = 0.09f;
+static constexpr float ANEMOMETER_RADIUS_M = 0.04f;
 // Using a single hall sensor and two magnets mounted on opposite sides -> 2 pulses per revolution
-static constexpr uint8_t PULSES_PER_REV = 2;
+static constexpr uint8_t PULSES_PER_REV = 1;
 
 // BH1750
 static constexpr uint8_t BH1750_ADDR = 0x23;
@@ -37,7 +37,7 @@ typedef struct __attribute__((packed)) {
   float tempC;
   float humidity;
   float lux;
-  float wind_kmh;
+  float wind_kmh; // wind speed in km/h (calibrated)
   uint32_t seq;
 } sensor_payload_t;
 

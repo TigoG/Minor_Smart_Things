@@ -2,8 +2,17 @@
 #include "Common.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClient.h>
+#include <PubSubClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "secret.h"
+
+static WiFiClient wifiClient;
+static PubSubClient mqttClient(wifiClient);
+static const char* MQTT_BROKER = "test.mosquitto.org";
+static const uint16_t MQTT_PORT = 1883;
+static const char* MQTT_TOPIC_BASE = "homestations/1051804/0";
 
 CommManager::CommManager() {}
 
@@ -14,6 +23,9 @@ void CommManager::begin() {
   WiFi.disconnect();
   vTaskDelay(pdMS_TO_TICKS(100));
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  // configure MQTT server
+  mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
 
   if (!httpQueue) httpQueue = xQueueCreate(5, sizeof(sensor_payload_t));
   xTaskCreatePinnedToCore(&CommManager::taskEntry, "CommTask", 8192, this, 1, NULL, 1);
@@ -31,7 +43,7 @@ String CommManager::makeJson(const sensor_payload_t &p) {
   body += ",\"lux\":";
   if (!isnan(p.lux)) body += String(p.lux, 1); else body += "null";
   body += ",\"wind_kmh\":";
-  body += String(p.wind_kmh, 2);
+  if (!isnan(p.wind_kmh)) body += String(p.wind_kmh, 1); else body += "null";
   body += ",\"seq\":";
   body += String(p.seq);
   body += "}";
@@ -42,6 +54,7 @@ void CommManager::task() {
   sensor_payload_t payload;
   unsigned long start = millis();
   unsigned long lastStatus = 0;
+  unsigned long lastMqttReconnect = 0;
 
   // Initial connect attempt with periodic status prints (every 5s)
   while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
@@ -97,6 +110,28 @@ void CommManager::task() {
       lastStatus = now;
     }
 
+    // Maintain MQTT connection when WiFi is available
+    if (WiFi.status() == WL_CONNECTED) {
+      if (!mqttClient.connected()) {
+        // Try to reconnect no more than once every 5s
+        if (now - lastMqttReconnect >= 5000) {
+          char clientId[48];
+          String mac = WiFi.macAddress();
+          String id = "ws-";
+          id += mac;
+          id.toCharArray(clientId, sizeof(clientId));
+          if (mqttClient.connect(clientId)) {
+            Serial.println("MQTT connected");
+          } else {
+            Serial.printf("MQTT connect failed, rc=%d\n", mqttClient.state());
+          }
+          lastMqttReconnect = now;
+        }
+      } else {
+        mqttClient.loop();
+      }
+    }
+
     if (got == pdTRUE) {
       if (WiFi.status() != WL_CONNECTED) {
         Serial.println("Comm: WiFi not connected, attempting reconnect...");
@@ -107,7 +142,66 @@ void CommManager::task() {
           vTaskDelay(pdMS_TO_TICKS(200));
         }
       }
+
       if (WiFi.status() == WL_CONNECTED) {
+        // Ensure MQTT connected before publish; attempt immediate connect if not
+        if (!mqttClient.connected()) {
+          char clientId[48];
+          String mac = WiFi.macAddress();
+          String id = "ws-";
+          id += mac;
+          id.toCharArray(clientId, sizeof(clientId));
+          if (mqttClient.connect(clientId)) {
+            Serial.println("MQTT connected (on send)");
+          } else {
+            Serial.printf("MQTT connect failed (on send) rc=%d\n", mqttClient.state());
+          }
+        }
+
+        if (mqttClient.connected()) {
+          char topic[64];
+          char msgbuf[32];
+
+          if (!isnan(payload.tempC)) {
+            dtostrf(payload.tempC, 0, 1, msgbuf);
+            snprintf(topic, sizeof(topic), "%s/Temperature", MQTT_TOPIC_BASE);
+            if (!mqttClient.publish(topic, msgbuf)) {
+              Serial.println("MQTT publish Temperature failed");
+            }
+          }
+
+          if (!isnan(payload.humidity)) {
+            dtostrf(payload.humidity, 0, 1, msgbuf);
+            snprintf(topic, sizeof(topic), "%s/Humidity", MQTT_TOPIC_BASE);
+            mqttClient.publish(topic, msgbuf);
+          }
+
+          // Wind speed in km/h (calibrated)
+          if (!isnan(payload.wind_kmh)) {
+            dtostrf(payload.wind_kmh, 0, 1, msgbuf);
+          } else {
+            snprintf(msgbuf, sizeof(msgbuf), "null");
+          }
+          snprintf(topic, sizeof(topic), "%s/Windspeed", MQTT_TOPIC_BASE);
+          mqttClient.publish(topic, msgbuf);
+
+          if (!isnan(payload.lux)) {
+            dtostrf(payload.lux, 0, 1, msgbuf);
+            snprintf(topic, sizeof(topic), "%s/Light", MQTT_TOPIC_BASE);
+            mqttClient.publish(topic, msgbuf);
+          }
+
+          // Optionally publish sequence
+          snprintf(topic, sizeof(topic), "%s/Seq", MQTT_TOPIC_BASE);
+          snprintf(msgbuf, sizeof(msgbuf), "%lu", (unsigned long)payload.seq);
+          mqttClient.publish(topic, msgbuf);
+
+          mqttClient.loop();
+        } else {
+          Serial.println("Comm: MQTT not connected, skipping MQTT publish");
+        }
+
+        // Also send to HTTP endpoint if configured (backwards compatibility)
         if (SERVER_URL && SERVER_URL[0] != '\0') {
           HTTPClient http;
           http.begin(SERVER_URL);
@@ -125,7 +219,7 @@ void CommManager::task() {
           //Serial.println("Comm: SERVER_URL empty, skipping HTTP POST");
         }
       } else {
-        Serial.println("Comm: still not connected, skipping HTTP POST");
+        Serial.println("Comm: still not connected, skipping network send");
       }
     }
   }
