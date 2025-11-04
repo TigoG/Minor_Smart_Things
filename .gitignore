@@ -1,5 +1,6 @@
 # Ignore secrets
 weatherStation/src/secret.h
+actuator/src/secret.h
 
 # LaTeX build artifacts
 *.aux
