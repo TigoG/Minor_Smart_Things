@@ -40,7 +40,7 @@ void setup() {
 
   // Start components
   gDisplayManager->begin(); // start display first for boot messages
-  gEspNowManager->begin();
+  //gEspNowManager->begin();
   gCommManager->begin();
   gSensorManager->begin();
 }
