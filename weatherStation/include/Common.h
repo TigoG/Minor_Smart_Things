@@ -6,6 +6,7 @@
 #include <Adafruit_SSD1306.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 
 // Display config
 #define SCREEN_WIDTH 128

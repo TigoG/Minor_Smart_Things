@@ -32,6 +32,10 @@ void setup() {
   Serial.begin(115200);
   vTaskDelay(pdMS_TO_TICKS(100)); // allow serial to start
 
+
+  // Initialize I2C early for display and sensors
+  Wire.begin(SDA_PIN, SCL_PIN);
+
   // instantiate managers
   gDisplayManager = new DisplayManager();
   gEspNowManager = new EspNowManager();
