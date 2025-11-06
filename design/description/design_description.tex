@@ -19,7 +19,7 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-This document explains why each component in the project was selected and how it is used (electrically, mechanically and in firmware). The description covers the weather-station node and the actuator options used across the repository.
+This document explains why each component in the project was selected and how it is used (electrically, mechanically, and in firmware). It documents the ESP32-based weather-station node and the actuator subsystem, describes the firmware manager responsibilities (SensorManager, DisplayManager, CommManager and optional EspNowManager), and how telemetry is delivered (local ESP-NOW, MQTT over TLS, and an optional HTTP endpoint). Calibration artifacts and test procedures used during development are referenced.
 \end{abstract}
 
 \tableofcontents
@@ -39,9 +39,10 @@ The list below follows the Bill of Materials and the specification.
 
 \textbf{How used:}
 \begin{itemize}
-\item Runs firmware responsible for sampling sensors, driving the display, running the shade logic, and publishing a server using MQTT.
-\item I2C master for the lux sensor and (optionally) the OLED.
-\item Handles interrupts for the anemometer (Hall sensor) to measure wind speed.
+\item Runs firmware responsible for sampling sensors, driving the display, running the shade logic, and delivering telemetry. Telemetry is published over MQTT (primary) and can also be POSTed to an HTTP endpoint; the node can also send sensor payloads locally via ESP-NOW to actuators.
+\item I2C master for the lux sensor and (optionally) the OLED; the BH1750 is used in one-shot mode and firmware implements a small moving average.
+\item Handles interrupts for the anemometer (Hall sensor) to measure wind speed; pulses are counted in an ISR and converted to km/h using a calibration curve.
+\item Implements FreeRTOS tasks (SensorManager, DisplayManager, CommManager, and optional EspNowManager); SensorManager creates a pinned task in the current implementation.
 \end{itemize}
 
 \subsection{BH1750 (I2C lux sensor)}
@@ -125,9 +126,10 @@ Wind direction sensing has been removed from this design. The system focuses on 
 \section{Firmware mapping and responsibilities}
 The repository provides manager classes that separate concerns:
 \begin{itemize}
-\item SensorManager: reads DHT22, BH1750, and wind speed edge counts; exposes read functions and periodic sampling (see \texttt{weatherStation/include/SensorManager.h}).
+\item SensorManager: responsible for periodic sampling of sensors (bit-banged DHT22, BH1750 one-shot light measurements, and anemometer pulse counting via ISR). It converts pulses to wind speed using the calibration curve and publishes a packed payload to inter-task queues (\texttt{espNowQueue}, \texttt{httpQueue}, \texttt{displayQueue}). See \texttt{weatherStation/include/SensorManager.h} and \texttt{weatherStation/src/managers/SensorManager.cpp}.
 \item DisplayManager: updates the SSD1306 OLED with human‑readable information.
-\item CommManager: packages sensor data into a JSON payload and publishes to server (see \texttt{weatherStation/include/CommManager.h}).
+\item CommManager: manages WiFi and MQTT connections using PubSubClient (current code configures TLS/port 8883), publishes telemetry to the broker. Credentials are kept in \texttt{weatherStation/src/secret.h}. See \texttt{weatherStation/include/CommManager.h} and \texttt{weatherStation/src/managers/CommManager.cpp}.
+\item EspNowManager: (optional; enabled from main when needed) consumes \texttt{espNowQueue} and sends sensor payloads over ESP-NOW to an actuator peer or via broadcast. See \texttt{weatherStation/include/EspNowManager.h} and \texttt{weatherStation/src/managers/EspNowManager.cpp}.
 \end{itemize}
 
 \subsection{ESP32 pin assignments (from specification)}
@@ -144,8 +146,8 @@ GPIO & Purpose & Notes \\
 
 \section{Calibration and testing}
 \begin{itemize}
-\item Wind speed: measure pulses per revolution and calibrate k\_speed against a reference (spec suggests placeholder k = 2.2\,m/rev).
-\item Lux: compare BH1750 readings with a handheld lux meter and adjust logic thresholds (lux\_close\_threshold, lux\_open\_threshold).
+\item Wind speed: pulses per second measured by the Hall sensor are converted to wind speed using a logarithmic calibration derived from bench measurements. The firmware uses the fit recorded in the calibration document (design/description/kalibratiecurve.tex): $\text{wind\_kmh} = 6.4056\ln(\text{pulses\_per\_sec}) + 10.212$ (R$^2$ = 0.9914). Values below 0.05 pulses/s are treated as zero (noise floor).
+\item Lux: BH1750 readings are compared to a handheld lux meter and logic thresholds (e.g., \texttt{lux\_close\_threshold}, \texttt{lux\_open\_threshold}) were chosen accordingly; the firmware applies a five-sample moving average and basic spike rejection.
 \item Shade control: run repeated open/close cycles; ensure servos move to stored angles; tune hysteresis and dwell times to avoid oscillation.
 \end{itemize}
 
@@ -165,6 +167,7 @@ GPIO & Purpose & Notes \\
 \section{References}
 Bill of Materials: design/bom/bom.tex \\
 Specification: design/spec.md \\
-Firmware interfaces: \texttt{weatherStation/include/SensorManager.h}, \texttt{weatherStation/include/DisplayManager.h}, \texttt{weatherStation/include/CommManager.h}
+Firmware interfaces: \texttt{weatherStation/include/SensorManager.h}, \texttt{weatherStation/include/DisplayManager.h}, \texttt{weatherStation/include/CommManager.h}, \texttt{weatherStation/include/EspNowManager.h} \\
+Actuator interface: \texttt{Actuator/include/ShadeController.h}
 
 \end{document}
