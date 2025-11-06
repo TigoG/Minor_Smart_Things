@@ -10,8 +10,8 @@
 
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
-static const char* MQTT_BROKER = "test.mosquitto.org";
-static const uint16_t MQTT_PORT = 1883;
+static const char* MQTT_BROKER = "145.24.237.211";
+static const uint16_t MQTT_PORT = 8883;
 static const char* MQTT_TOPIC_BASE = "homestations/1051804/0";
 
 CommManager::CommManager() {}
@@ -29,6 +29,7 @@ void CommManager::begin() {
 
   if (!httpQueue) httpQueue = xQueueCreate(5, sizeof(sensor_payload_t));
   xTaskCreatePinnedToCore(&CommManager::taskEntry, "CommTask", 8192, this, 1, NULL, 1);
+  
 }
 
 void CommManager::taskEntry(void* pv) {
@@ -120,8 +121,9 @@ void CommManager::task() {
           String id = "ws-";
           id += mac;
           id.toCharArray(clientId, sizeof(clientId));
-          if (mqttClient.connect(clientId)) {
+          if (mqttClient.connect(clientId, secret::MQTT_USER, secret::MQTT_PASS)) {
             Serial.println("MQTT connected");
+            mqttClient.publish("homestations/1051804/0/gps", "51.5040, 3.8880");
           } else {
             Serial.printf("MQTT connect failed, rc=%d\n", mqttClient.state());
           }
@@ -151,8 +153,9 @@ void CommManager::task() {
           String id = "ws-";
           id += mac;
           id.toCharArray(clientId, sizeof(clientId));
-          if (mqttClient.connect(clientId)) {
+          if (mqttClient.connect(clientId, secret::MQTT_USER, secret::MQTT_PASS)) {
             Serial.println("MQTT connected (on send)");
+            mqttClient.publish("homestations/1051804/0/gps", "51.5040, 3.8880");
           } else {
             Serial.printf("MQTT connect failed (on send) rc=%d\n", mqttClient.state());
           }
@@ -164,7 +167,7 @@ void CommManager::task() {
 
           if (!isnan(payload.tempC)) {
             dtostrf(payload.tempC, 0, 1, msgbuf);
-            snprintf(topic, sizeof(topic), "%s/Temperature", MQTT_TOPIC_BASE);
+            snprintf(topic, sizeof(topic), "%s/temperature", MQTT_TOPIC_BASE);
             if (!mqttClient.publish(topic, msgbuf)) {
               Serial.println("MQTT publish Temperature failed");
             }
@@ -172,7 +175,7 @@ void CommManager::task() {
 
           if (!isnan(payload.humidity)) {
             dtostrf(payload.humidity, 0, 1, msgbuf);
-            snprintf(topic, sizeof(topic), "%s/Humidity", MQTT_TOPIC_BASE);
+            snprintf(topic, sizeof(topic), "%s/humidity", MQTT_TOPIC_BASE);
             mqttClient.publish(topic, msgbuf);
           }
 
@@ -182,12 +185,12 @@ void CommManager::task() {
           } else {
             snprintf(msgbuf, sizeof(msgbuf), "null");
           }
-          snprintf(topic, sizeof(topic), "%s/Windspeed", MQTT_TOPIC_BASE);
+          snprintf(topic, sizeof(topic), "%s/windspeed", MQTT_TOPIC_BASE);
           mqttClient.publish(topic, msgbuf);
 
           if (!isnan(payload.lux)) {
             dtostrf(payload.lux, 0, 1, msgbuf);
-            snprintf(topic, sizeof(topic), "%s/Light", MQTT_TOPIC_BASE);
+            snprintf(topic, sizeof(topic), "%s/light", MQTT_TOPIC_BASE);
             mqttClient.publish(topic, msgbuf);
           }
 
@@ -195,6 +198,8 @@ void CommManager::task() {
           snprintf(topic, sizeof(topic), "%s/Seq", MQTT_TOPIC_BASE);
           snprintf(msgbuf, sizeof(msgbuf), "%lu", (unsigned long)payload.seq);
           mqttClient.publish(topic, msgbuf);
+
+          mqttClient.publish("homestations/1051804/0/update", "update");
 
           mqttClient.loop();
         } else {
