@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiClient.h>
 #include <PubSubClient.h>
 #include "ShadeController.h"
 #include "CommandProcessor.h"
@@ -30,6 +29,8 @@ static const char* WIFI_SSID = secret::WIFI_SSID;
 static const char* WIFI_PASS = secret::WIFI_PASS;
 static const char* MQTT_BROKER = secret::MQTT_BROKER;
 static const uint16_t MQTT_PORT = secret::MQTT_PORT;
+static const char* MQTT_USER = secret::MQTT_USER;
+static const char* MQTT_PASS = secret::MQTT_PASS;
 static const char* MQTT_TOPIC_BASE = secret::MQTT_TOPIC_BASE;
 
 // Running copy of latest sensor values (shared SensorPayload struct from ShadeController.h)
@@ -80,9 +81,12 @@ void mqttReconnect() {
   String id = "actuator-";
   id += mac;
   id.toCharArray(clientId, sizeof(clientId));
-  if (mqttClient.connect(clientId)) {
+  if (mqttClient.connect(clientId, MQTT_USER, MQTT_PASS)) {
     Serial.println("MQTT connected");
     char topic[64];
+    // publish a retained 'connected' message on <topic_base>/connection
+    snprintf(topic, sizeof(topic), "%s/connection", MQTT_TOPIC_BASE);
+    mqttClient.publish(topic, "connected", true);
     snprintf(topic, sizeof(topic), "%s/Temperature", MQTT_TOPIC_BASE);
     mqttClient.subscribe(topic);
     snprintf(topic, sizeof(topic), "%s/Humidity", MQTT_TOPIC_BASE);
@@ -217,7 +221,6 @@ void setup() {
   // Initialize MQTT client and WiFi to subscribe to sensor topics
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
- 
   Serial.printf("Connecting to WiFi '%s' ...\n", WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   unsigned long t0 = millis();
