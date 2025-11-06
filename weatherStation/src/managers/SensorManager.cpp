@@ -1,6 +1,7 @@
 #include "SensorManager.h"
 #include "Common.h"
 #include <Arduino.h>
+#include <cmath>
 #include <Wire.h>
 #include <BH1750.h>
 #include <freertos/FreeRTOS.h>
@@ -62,14 +63,17 @@ void SensorManager::task() {
     interrupts();
 
     // Use pulses per second and apply calibration to convert to km/h:
-    // calibration: wind_kmh = 1.716 * pulses_per_sec + 11.249 (R^2 = 0.9901)
+    // Calibration (logarithmic fit from calibration curve):
+    //   wind_kmh = 6.4056 * ln(pulses_per_sec) + 10.212   (R^2 = 0.9914)
     float pulses_per_sec = (float)pulses / (_intervalMs / 1000.0f);
     float wind_kmh;
     // Treat tiny pulse rates as zero (noise floor)
     if (pulses_per_sec < 0.05f) {
       wind_kmh = 0.0f;
     } else {
-      wind_kmh = 1.716f * pulses_per_sec + 11.249f;
+      // Use natural logarithm; clamp negative results to zero
+      float fitVal = 6.4056f * logf(pulses_per_sec) + 10.212f;
+      wind_kmh = (fitVal > 0.0f) ? fitVal : 0.0f;
     }
     // Legacy physical conversion (kept as reference):
     // const float PI_f = 3.14159265358979323846f;
