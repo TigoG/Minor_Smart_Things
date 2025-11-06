@@ -39,7 +39,7 @@ The list below follows the Bill of Materials and the specification.
 
 \textbf{How used:}
 \begin{itemize}
-\item Runs firmware responsible for sampling sensors, driving the display, running the shade logic, and publishing JSON to a server.
+\item Runs firmware responsible for sampling sensors, driving the display, running the shade logic, and publishing a server using MQTT.
 \item I2C master for the lux sensor and (optionally) the OLED.
 \item Handles interrupts for the anemometer (Hall sensor) to measure wind speed.
 \end{itemize}
@@ -71,7 +71,7 @@ The list below follows the Bill of Materials and the specification.
 \begin{itemize}
 \item A magnet is mounted in the anemometer hub; each pass triggers the Hall switch.
 \item Output wired to an interrupt‑capable ESP32 GPIO with a 10\,k pull‑up.
-\item Debounce / edge‑counting handled in firmware; pulses per revolution configurable (spec default = 2).
+\item Debounce / edge‑counting handled in firmware; pulses per revolution configurable.
 \end{itemize}
 
 \subsection*{Wind direction}
@@ -102,7 +102,7 @@ Wind direction sensing has been removed from this design. The system focuses on 
 \textbf{How used:}
 \begin{itemize}
 \item Use quality connectors for external sensors; route servo cable through a cable gland for weatherproofing.
-\item Print moving parts in PETG/ASA for outdoor durability (spec recommends this).
+\item Print moving parts in PETG/PLA for outdoor durability.
 \end{itemize}
 
 \subsection{Neodymium magnet}
