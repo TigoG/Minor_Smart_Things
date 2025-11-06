@@ -6,16 +6,13 @@ left to right direction
 package "Weather Station (Device)" as WS {
   component "Main" as Main
   component "Sensor Manager" as SensorManager
-  component "ESP-NOW Manager" as EspNowManager
-  component "Comm Manager" as CommManager
+  component "Comm Manager (MQTT)" as CommManager
   component "Display Manager" as DisplayManager
 
-  queue "espNowQueue" as Q_espNow
-  queue "httpQueue" as Q_http
+  queue "mqttQueue" as Q_mqtt
   queue "displayQueue" as Q_display
 
   node "Sensor Task" as SensorTask
-  node "ESP-NOW Task" as EspNowTask
   node "Comm Task" as CommTask
   node "Display Task" as DisplayTask
 
@@ -30,20 +27,18 @@ package "Weather Station (Device)" as WS {
 }
 
 package "External Systems" {
+  cloud "MQTT Broker\n(Mosquitto / Cloud MQTT)" as Broker
   node "Actuator ESP32 (peer)" as ActuatorESP
   rectangle "MG90 Servo (MG90 9g)" as MG90
-  cloud "HTTP Server / Cloud" as Server
 }
 
 ' Startup and instantiation
 Main --> SensorManager : instantiate & start
-Main --> EspNowManager : instantiate & start
 Main --> CommManager : instantiate & start
 Main --> DisplayManager : instantiate & start
 
 ' Tasks creation
 SensorManager --> SensorTask
-EspNowManager --> EspNowTask
 CommManager --> CommTask
 DisplayManager --> DisplayTask
 
@@ -51,8 +46,7 @@ DisplayManager --> DisplayTask
 DHT --> SensorTask : measurements
 BH1750 --> SensorTask : measurements
 Anem --> SensorTask : pulse counts
-SensorTask --> Q_espNow : publish payload
-SensorTask --> Q_http : publish payload
+SensorTask --> Q_mqtt : publish payload
 SensorTask --> Q_display : update display
 
 ' Consumers
@@ -60,25 +54,22 @@ Q_display --> DisplayTask : consume
 DisplayTask --> SSD1306 : render
 DisplayTask --> Serial : logs
 
-Q_http --> CommTask : consume
-CommTask --> Server : HTTP POST telemetry
+Q_mqtt --> CommTask : consume
+CommTask --> Broker : publish telemetry (MQTT/TLS)
 CommTask --> Serial : logs
 
-Q_espNow --> EspNowTask : consume
-EspNowTask --> ActuatorESP : ESP-NOW message (peer/broadcast)
-EspNowTask --> Serial : send status
-
-' Actuator chain
+Broker --> ActuatorESP : command / fan-out (MQTT)
 ActuatorESP --> MG90 : PWM signal (servo control)
 
 note right of SensorTask
 sensor_payload: temp, humidity, lux, wind_kmh, seq
 end note
 
-note left of EspNowTask
-Actuator communication modes:
-- Broadcast if actuatorMac == FF:FF:...
-- Peer delivery if actuatorMac configured
+note right of Broker
+Both ESP devices connect to the same MQTT broker.
+Typical topics:
+- homestation/{student_id}/{location}/{sensorType}
+Use TLS and device auth (certs / tokens)
 end note
 
 @enduml
