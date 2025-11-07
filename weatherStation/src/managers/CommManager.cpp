@@ -195,11 +195,11 @@ void CommManager::task() {
           }
 
           // Optionally publish sequence
-          snprintf(topic, sizeof(topic), "%s/Seq", MQTT_TOPIC_BASE);
-          snprintf(msgbuf, sizeof(msgbuf), "%lu", (unsigned long)payload.seq);
-          mqttClient.publish(topic, msgbuf);
+          //snprintf(topic, sizeof(topic), "%s/Seq", MQTT_TOPIC_BASE);
+          //snprintf(msgbuf, sizeof(msgbuf), "%lu", (unsigned long)payload.seq);
+          //mqttClient.publish(topic, msgbuf);
 
-          mqttClient.publish("homestations/1051804/0/update", "update");
+          mqttClient.publish("homestations/1051804/0/update", "1");
 
           mqttClient.loop();
         } else {

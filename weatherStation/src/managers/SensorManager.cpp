@@ -29,11 +29,44 @@ SensorManager::SensorManager(uint32_t intervalMs)
 void SensorManager::begin() {
   Wire.begin(SDA_PIN, SCL_PIN);
 
-  // Initialize BH1750 using library in one-time mode
-  if (!lightMeter.begin(BH1750::ONE_TIME_HIGH_RES_MODE)) {
-    Serial.println("BH1750 init failed");
+  // Scan I2C for BH1750 on common addresses (0x23 and 0x5C) and attempt init.
+  Serial.println("Scanning I2C for BH1750...");
+  uint8_t candidate_addrs[] = { BH1750_ADDR, 0x5C };
+  uint8_t foundAddr = 0;
+  size_t naddrs = sizeof(candidate_addrs) / sizeof(candidate_addrs[0]);
+  for (size_t i = 0; i < naddrs; ++i) {
+    uint8_t addr = candidate_addrs[i];
+    Wire.beginTransmission(addr);
+    uint8_t ack = Wire.endTransmission();
+    if (ack == 0) {
+      Serial.printf("I2C device responds at 0x%02X\n", addr);
+      foundAddr = addr;
+      break;
+    } else {
+      Serial.printf("No I2C ack at 0x%02X (err=%d)\n", addr, ack);
+    }
+  }
+
+  bool bhOk = false;
+  if (foundAddr) {
+    // Pass explicit address and Wire instance to the BH1750 library to avoid address ambiguity.
+    bhOk = lightMeter.begin(BH1750::ONE_TIME_HIGH_RES_MODE, foundAddr, &Wire);
+    if (bhOk) {
+      Serial.printf("BH1750 init OK at 0x%02X (one-shot)\n", foundAddr);
+    } else {
+      Serial.printf("BH1750 init failed at 0x%02X\n", foundAddr);
+    }
   } else {
-    Serial.println("BH1750 init OK (one-shot)");
+    // Try default address from Common.h, then library default as fallback.
+    if (lightMeter.begin(BH1750::ONE_TIME_HIGH_RES_MODE, BH1750_ADDR, &Wire)) {
+      Serial.printf("BH1750 init OK at default addr 0x%02X\n", BH1750_ADDR);
+      bhOk = true;
+    } else if (lightMeter.begin(BH1750::ONE_TIME_HIGH_RES_MODE)) {
+      Serial.println("BH1750 init OK (library default)");
+      bhOk = true;
+    } else {
+      Serial.println("BH1750 init failed (no BH1750 found)");
+    }
   }
 
   delay(200);

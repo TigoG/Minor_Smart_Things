@@ -11,7 +11,7 @@
 const int SERVO_PIN = 4;
 
 // Default motion parameters
-const float DEFAULT_ANGLE = 45.0f;
+const float DEFAULT_ANGLE = 90.0f;
 const unsigned long DEFAULT_UP_DURATION = 5000UL;   // 5s
 const unsigned long DEFAULT_DOWN_DURATION = 10000UL; // 10s
 
@@ -57,8 +57,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (isNull) gLatestPayload.wind_kmh = NAN; else gLatestPayload.wind_kmh = msg.toFloat();
   } else if (key == "light") {
     if (isNull) gLatestPayload.lux = NAN; else gLatestPayload.lux = msg.toFloat();
-  } else if (key == "seq") {
-    if (isNull) gLatestPayload.seq = 0; else gLatestPayload.seq = (uint32_t)strtoul(msg.c_str(), NULL, 10);
   } else {
     // unknown topic suffix - ignore
   }
@@ -95,8 +93,6 @@ void mqttReconnect() {
     mqttClient.subscribe(topic);
     snprintf(topic, sizeof(topic), "%s/Light", MQTT_TOPIC_BASE);
     mqttClient.subscribe(topic);
-    snprintf(topic, sizeof(topic), "%s/Seq", MQTT_TOPIC_BASE);
-    mqttClient.subscribe(topic);
   } else {
     Serial.printf("MQTT connect failed, rc=%d\n", mqttClient.state());
   }
@@ -105,7 +101,7 @@ void mqttReconnect() {
 void printHelp() {
   Serial.println("Available commands:");
   Serial.println("  HELP");
-  Serial.println("  SENSOR <tempC|NaN> <humidity|NaN> <lux|NaN> <wind_kmh|NaN> <seq>");
+  Serial.println("  SENSOR <tempC|NaN> <humidity|NaN> <lux|NaN> <wind_kmh|NaN>");
   Serial.println("  UP [angle] [duration_ms]");
   Serial.println("  DOWN [angle] [duration_ms]");
   Serial.println("  OPEN [angle_rel] [hold_ms]");
@@ -117,22 +113,19 @@ void printHelp() {
 void handleSensorCommand() {
   if (!gShadeController) { Serial.println("No ShadeController instance"); return; }
   float temp = NAN, hum = NAN, lux = NAN, wind = NAN;
-  uint32_t seq = 0;
   char *tok = strtok(NULL, " \t"); if (tok) temp = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
   tok = strtok(NULL, " \t"); if (tok) hum  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
   tok = strtok(NULL, " \t"); if (tok) lux  = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
   tok = strtok(NULL, " \t"); if (tok) wind = (strcmp(tok, "NaN") == 0 || strcmp(tok, "nan") == 0) ? NAN : atof(tok);
-  tok = strtok(NULL, " \t"); if (tok) seq = (uint32_t)strtoul(tok, NULL, 10);
 
   SensorPayload payload;
   payload.tempC = temp;
   payload.humidity = hum;
   payload.lux = lux;
   payload.wind_kmh = wind;
-  payload.seq = seq;
 
-  Serial.printf("Injecting sensor: temp=%0.1f hum=%0.1f lux=%0.1f wind=%0.2f seq=%u\n",
-                payload.tempC, payload.humidity, payload.lux, payload.wind_kmh, payload.seq);
+  Serial.printf("Injecting sensor: temp=%0.1f hum=%0.1f lux=%0.1f wind=%0.2f\n",
+                payload.tempC, payload.humidity, payload.lux, payload.wind_kmh);
 
   gShadeController->handleMessage((const uint8_t *)&payload, sizeof(payload));
 }
@@ -238,7 +231,6 @@ void setup() {
   gLatestPayload.humidity = NAN;
   gLatestPayload.lux = NAN;
   gLatestPayload.wind_kmh = NAN;
-  gLatestPayload.seq = 0;
  
   mqttReconnect();
 

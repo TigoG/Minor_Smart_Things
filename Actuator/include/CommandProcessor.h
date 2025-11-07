@@ -7,7 +7,7 @@
 class CommandProcessor {
 public:
   CommandProcessor(ShadeController* controller,
-                   float defaultAngle = 45.0f,
+                   float defaultAngle = 90.0f,
                    unsigned long upDuration = 5000UL,
                    unsigned long downDuration = 10000UL);
   ~CommandProcessor();

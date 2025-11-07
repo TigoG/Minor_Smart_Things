@@ -17,7 +17,7 @@ typedef struct __attribute__((packed)) {
 class ShadeController {
 public:
   ShadeController(int servoPin,
-                  float defaultAngle = 45.0f,
+                  float defaultAngle = 90.0f,
                   unsigned long upDuration = 5000UL,
                   unsigned long downDuration = 10000UL);
 
