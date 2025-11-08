@@ -33,6 +33,10 @@ public:
   // moveDurationMs specifies how long the motion to/from the target should take (ms).
   void pulseAngle(float angleDeg, unsigned long holdMs, unsigned long moveDurationMs = 500UL);
 
+  // Query whether the shade is currently considered OPEN.
+  // Returns true if open, false otherwise.
+  bool isOpen();
+
 private:
   Servo _servo;
   int _servoPin;

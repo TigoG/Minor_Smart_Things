@@ -103,7 +103,12 @@ void ShadeController::pulseAngle(float angleDeg, unsigned long holdMs, unsigned 
     if (stepDelay >= 1) delay(stepDelay);
   }
 
-  s_shadeState = SHADE_CLOSED;
+  // Set final state according to the direction of the pulse: positive angle => OPEN
+  if (angleDeg > 0.0f) {
+    s_shadeState = SHADE_OPEN;
+  } else {
+    s_shadeState = SHADE_CLOSED;
+  }
   s_lastActionMillis = millis();
   Serial.println("pulseAngle: complete, returned to baseline");
 }
@@ -254,7 +259,11 @@ void ShadeController::performDown(float angle, unsigned long durationMs) {
   const unsigned long moveDur = 500UL;
   pulseAngle(-angle, durationMs, moveDur);
 }
-
+ 
+bool ShadeController::isOpen() {
+  return s_shadeState == SHADE_OPEN;
+}
+ 
 // ESP-NOW receive callback
 void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
   Serial.printf("Got %d bytes from %02X:%02X:%02X:%02X:%02X:%02X\n",

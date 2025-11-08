@@ -47,6 +47,27 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String key = (idx >= 0) ? t.substring(idx + 1) : t;
   key.toLowerCase();
 
+  // Special-case: motor topic toggles shade open/close when payload == "1"
+  if (t.equalsIgnoreCase("homestations/1051804/0/motor") || t.endsWith("/motor")) {
+    Serial.printf("MQTT motor topic: %s -> %s\n", topic, msg.c_str());
+    if (msg.equals("1")) {
+      if (gShadeController) {
+        if (gShadeController->isOpen()) {
+          Serial.println("MQTT: motor=1 -> currently OPEN, sending CLOSE");
+          String cmd = "close";
+          gShadeController->handleMessage((const uint8_t*)cmd.c_str(), cmd.length());
+        } else {
+          Serial.println("MQTT: motor=1 -> currently CLOSED/UNKNOWN, sending OPEN");
+          String cmd = "open";
+          gShadeController->handleMessage((const uint8_t*)cmd.c_str(), cmd.length());
+        }
+      }
+    } else {
+      Serial.printf("MQTT motor: payload '%s' ignored\n", msg.c_str());
+    }
+    return;
+  }
+
   bool isNull = msg.equalsIgnoreCase("null") || msg.equalsIgnoreCase("nan") || msg.length() == 0;
 
   if (key == "temperature") {
@@ -82,9 +103,6 @@ void mqttReconnect() {
   if (mqttClient.connect(clientId, MQTT_USER, MQTT_PASS)) {
     Serial.println("MQTT connected");
     char topic[64];
-    // publish a retained 'connected' message on <topic_base>/connection
-    snprintf(topic, sizeof(topic), "%s/connection", MQTT_TOPIC_BASE);
-    mqttClient.publish(topic, "connected", true);
     snprintf(topic, sizeof(topic), "%s/Temperature", MQTT_TOPIC_BASE);
     mqttClient.subscribe(topic);
     snprintf(topic, sizeof(topic), "%s/Humidity", MQTT_TOPIC_BASE);
@@ -93,6 +111,8 @@ void mqttReconnect() {
     mqttClient.subscribe(topic);
     snprintf(topic, sizeof(topic), "%s/Light", MQTT_TOPIC_BASE);
     mqttClient.subscribe(topic);
+    // Subscribe to motor control topic used externally
+    mqttClient.subscribe("homestations/1051804/0/motor");
   } else {
     Serial.printf("MQTT connect failed, rc=%d\n", mqttClient.state());
   }
