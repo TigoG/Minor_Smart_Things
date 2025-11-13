@@ -1,144 +1,55 @@
 # Minor Smart Things
 
-Central repository for small IoT projects: a Weather Station and an Actuator (sunscreen) — firmware, hardware design, BOM and testing materials.
+Repository for two embedded PlatformIO projects: a shade actuator and a weather station used for the Minor Smart Things assignment.
 
-Table of contents
+Quick summary
 
-- [Overview](#overview)
-- [Goals](#goals)
-- [Architecture](#architecture)
-- [Subprojects](#subprojects)
-  - [Actuator](#actuator)
-  - [Weather Station](#weather-station)
-- [Wiring & BOM](#wiring--bom)
-- [Usage examples](#usage-examples)
-- [License](#license)
+- Actuator: controls a shade motor and exposes simple commands. Code and PlatformIO project are in [`Actuator/`](Actuator/:1) — see [`Actuator/include/README`](Actuator/include/README:1) for wiring, build, and command reference.
+- Weather station: reads sensors and displays values, and sends data over ESP-NOW. Code is in [`weatherStation/`](weatherStation/:1) — see [`weatherStation/include/README`](weatherStation/include/README:1) for wiring and calibration.
 
-## Overview
+Folder structure
 
-Minor Smart Things contains firmware, hardware notes and documentation for small IoT devices. The two main working pieces are a field Weather Station (ESP32) that publishes sensor telemetry and an Actuator (ESP8266/ESP32) that controls a sunscreen or similar motorised device.
+- [`Actuator/`](Actuator/:1) — PlatformIO project for the shade actuator (source in [`Actuator/src/`](Actuator/src:1) and headers in [`Actuator/include/`](Actuator/include:1)).
+- [`weatherStation/`](weatherStation/:1) — PlatformIO project for the weather station (source in [`weatherStation/src/`](weatherStation/src:1) and headers in [`weatherStation/include/`](weatherStation/include:1)).
+- [`design/`](design/:1) — design documents, diagrams, BOM and calibration notes (e.g., [`design/description/`](design/description:1)).
+- [`firmware/`](firmware/:1) — miscellaneous firmware sketches (e.g., [`firmware/weather_station.ino`](firmware/weather_station.ino:1)).
 
-## Goals
+Quick start
 
-- Use standard protocols (MQTT/HTTP) and secure transport where possible.
-- Make it easy to build, test and deploy firmware using PlatformIO and common commodity parts.
+Requirements:
 
-## Architecture
+- PlatformIO (VS Code extension or CLI) installed on your machine.
 
-The high-level architecture diagram is available here: [`design/architecture.puml`](design/architecture.puml:1).
+Build and upload (PlatformIO CLI)
 
-Summary:
+- Build actuator:
 
-- Field Devices:
-  - Weather Station (ESP32) — sensors: light (BH1750 / LDR), wind speed & direction, temperature/humidity (DHT22).
-  - Actuator Device (ESP8266/ESP32) — motor/relay to open/close sunscreen with position feedback.
-- Connectivity: MQTT (recommended: Mosquitto / Cloud MQTT) and optional HTTP/REST for APIs.
-- Cloud / Backend: ingest, processing and dashboards. Devices publish telemetry to MQTT topics and subscribe to commands.
+  1. Open a terminal at the repository root and run:
+     - `cd Actuator && pio run`
+     - To upload: `cd Actuator && pio run -t upload`
 
-Refer to [`design/architecture.puml`](design/architecture.puml:1) for data flows and notes on security (MQTT over TLS, device auth).
+- Build weather station:
 
-## Subprojects
+  1. Open a terminal at the repository root and run:
+     - `cd weatherStation && pio run`
+     - To upload: `cd weatherStation && pio run -t upload`
 
-### Actuator
+Serial monitor:
 
-Location: [`Actuator/`](Actuator/:1)
+- Use `pio device monitor -p <port>` or `pio run -t monitor` inside the project folder.
 
-Brief: Firmware for a sunscreen actuator with local motor control and position feedback. Uses PlatformIO (Arduino framework).
+Where to find wiring and configuration
 
-Quick start:
+- Actuator wiring and notes: [`Actuator/include/README`](Actuator/include/README:1) and [`Actuator/src/macAddress.txt`](Actuator/src/macAddress.txt:1).
+- Weather station wiring and calibration: [`weatherStation/include/README`](weatherStation/include/README:1) and [`design/description/kalibratiecurve.tex`](design/description/kalibratiecurve.tex:1).
 
-1. Open the project in VS Code with the PlatformIO extension.
-2. Build:
-   - pio run -e esp32dev
-   - (or) platformio run -e esp32dev
-3. Upload: pio run -t upload -e esp32dev
-4. Serial monitor: pio device monitor -e esp32dev --baud 115200
+Important files
 
-Files of interest:
+- [`Actuator/src/main.cpp`](Actuator/src/main.cpp:1) — actuator entry point.
+- [`Actuator/include/ShadeController.h`](Actuator/include/ShadeController.h:1) — shade controller interface.
+- [`weatherStation/src/main.cpp`](weatherStation/src/main.cpp:1) — weather station entry point.
+- [`weatherStation/include/SensorManager.h`](weatherStation/include/SensorManager.h:1) — sensor manager interface.
 
-- [`Actuator/src/main.cpp`](Actuator/src/main.cpp:1)
-- [`Actuator/include/ShadeController.h`](Actuator/include/ShadeController.h:1)
-- [`Actuator/include/StepperController.h`](Actuator/include/StepperController.h:1)
+Calibration & testing
 
-Notes:
-
-- Check [`Actuator/platformio.ini`](Actuator/platformio.ini:1) to adjust board/env.
-
-### Weather Station
-
-Location: [`weatherStation/`](weatherStation/:1)
-
-Brief: ESP32-based weather station that reads multiple sensors and publishes telemetry over MQTT (or stores locally). Uses PlatformIO and several Adafruit libraries.
-
-Quick start:
-
-1. Open the project in VS Code with the PlatformIO extension.
-2. Install dependencies automatically via PlatformIO (see lib_deps in [`weatherStation/platformio.ini`](weatherStation/platformio.ini:1)).
-3. Build: pio run -e esp32dev
-4. Upload: pio run -t upload -e esp32dev
-5. Serial monitor: pio device monitor -e esp32dev --baud 115200
-
-Files of interest:
-
-- [`weatherStation/src/main.cpp`](weatherStation/src/main.cpp:1)
-- [`weatherStation/include/README`](weatherStation/include/README:1)
-- [`weatherStation/src/managers/DisplayManager.cpp`](weatherStation/src/managers/DisplayManager.cpp:1)
-
-Notes:
-
-- Secrets (Wi-Fi / MQTT credentials) are kept in [`weatherStation/src/secret.h`](weatherStation/src/secret.h:1). Do not commit sensitive credentials to public repos.
-
-## Wiring & Bill of Materials (BOM)
-
-- Wiring notes and diagrams: [`design/wiring.md`](design/wiring.md:1)
-- BOM and LaTeX source: [`design/bom/bom_README.md`](design/bom/bom_README.md:1) and [`design/bom/bom.md`](design/bom/bom.md:1)
-
-Build the BOM PDF:
-
-pdflatex -interaction=nonstopmode -output-directory=design design/bom.tex
-
-## Usage examples
-
-Local testing (single device):
-
-- Build and upload the firmware using the PlatformIO commands above.
-- Open the serial monitor to view logs and telemetry.
-
-MQTT example (topics/payload):
-
-- Telemetry topic: devices/{device_id}/telemetry
-- Actuator command topic: devices/{actuator_id}/actuator/command
-- Example telemetry payload:
-
-{
-  "light": 123,
-  "wind_speed": 1.7,
-  "temp": 21.5,
-  "humidity": 55.1
-}
-
-Example actuator command:
-
-{
-  "command": "set_position",
-  "position": 75
-}
-
-## Development & Build
-
-Recommended tools:
-
-- VS Code with PlatformIO extension
-- PlatformIO Core (pio) for CLI builds
-- pdflatex (TeX Live / MiKTeX) for BOM PDF generation
-
-PlatformIO common commands:
-
-- Build: pio run -e esp32dev
-- Upload: pio run -t upload -e esp32dev
-- Monitor serial: pio device monitor -e esp32dev --baud 115200
-
-## Authors / Contacts
-
-- Project: Minor Smart Things
-- Maintainer: Tigo Goes
+- See [`design/description/kalibratiecurve.tex`](design/description/kalibratiecurve.tex:1) and [`design/testing/test.tex`](design/testing/test.tex:1) for calibration details and test plans.
